@@ -11,3 +11,8 @@ backups/
 
 *.bak
 *.tmp.js
+
+v3-temp/
+v4-temp/
+v5-temp/
+v6-temp/
