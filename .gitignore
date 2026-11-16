@@ -8,3 +8,6 @@ node_modules/
 *.db-*
 backups/
 .DS_Store
+
+*.bak
+*.tmp.js

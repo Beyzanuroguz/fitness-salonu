@@ -41,9 +41,59 @@ function api(method,pathname,body){
  if(method==='POST'&&pathname==='/api/members') {required(body,'name','expires');const r=db.prepare('INSERT INTO members(name,phone,email,plan,expires,credits,status) VALUES(?,?,?,?,?,?,?)').run(body.name,String(body.phone||''),String(body.email||''),body.plan||'Aylık + 8 Ders',body.expires,Number(body.credits??8),'Aktif');log('Yeni üye',body.name);return {id:Number(r.lastInsertRowid)}}
  if(method==='PATCH'&&/^\/api\/members\/\d+$/.test(pathname)){let id=Number(pathname.split('/').pop());const allowed=['name','phone','email','plan','expires','credits','status'];const fields=Object.keys(body).filter(k=>allowed.includes(k));if(!fields.length)throw new Error('Değiştirilecek alan yok');db.prepare(`UPDATE members SET ${fields.map(k=>k+'=?').join(',')} WHERE id=?`).run(...fields.map(k=>body[k]),id);return {ok:true}}
  if(method==='POST'&&pathname==='/api/classes'){required(body,'title','trainer_id','starts_at');const r=db.prepare('INSERT INTO classes(title,trainer_id,starts_at,duration,capacity,studio) VALUES(?,?,?,?,?,?)').run(body.title,Number(body.trainer_id),body.starts_at,Number(body.duration||50),Number(body.capacity||12),body.studio||'Stüdyo 1');log('Yeni ders',body.title);return {id:Number(r.lastInsertRowid)}}
- if(method==='POST'&&pathname==='/api/bookings'){required(body,'member_id','class_id');const m=db.prepare('SELECT * FROM members WHERE id=?').get(Number(body.member_id));const c=db.prepare('SELECT * FROM classes WHERE id=?').get(Number(body.class_id));if(!m||!c)throw new Error('Üye veya ders bulunamadı');if(m.status!=='Aktif'||m.expires<datePlus(0))throw new Error('Üyelik aktif değil');if(m.credits<=0)throw new Error('Ders hakkı kalmadı');const existing=db.prepare('SELECT * FROM bookings WHERE member_id=? AND class_id=?').get(m.id,c.id);if(existing&&existing.status!=='cancelled')throw new Error('Bu derse zaten kayıtlısınız');const count=db.prepare("SELECT count(*) n FROM bookings WHERE class_id=? AND status IN ('reserved','attended')").get(c.id).n;const status=count>=c.capacity?'waitlist':'reserved';if(existing)db.prepare('UPDATE bookings SET status=? WHERE id=?').run(status,existing.id);else db.prepare('INSERT INTO bookings(member_id,class_id,status) VALUES(?,?,?)').run(m.id,c.id,status);log('Rezervasyon',`${m.name} - ${c.title} (${status})`);return {status}}
- if(method==='POST'&&/^\/api\/bookings\/\d+\/cancel$/.test(pathname)){const id=Number(pathname.split('/')[3]);const b=db.prepare('SELECT * FROM bookings WHERE id=?').get(id);if(!b||b.status==='attended')throw new Error('Rezervasyon iptal edilemiyor');db.prepare("UPDATE bookings SET status='cancelled' WHERE id=?").run(id);const next=db.prepare("SELECT id FROM bookings WHERE class_id=? AND status='waitlist' ORDER BY id LIMIT 1").get(b.class_id);if(next)db.prepare("UPDATE bookings SET status='reserved' WHERE id=?").run(next.id);return {ok:true}}
- if(method==='POST'&&/^\/api\/bookings\/\d+\/attendance$/.test(pathname)){const id=Number(pathname.split('/')[3]);const b=db.prepare('SELECT * FROM bookings WHERE id=?').get(id);if(!b)throw new Error('Rezervasyon bulunamadı');const status=body.present?'attended':'absent';if(b.status==='attended'&&status!=='attended')throw new Error('İşlenmiş yoklama değiştirilemez');if(b.status!=='attended'&&status==='attended'){const m=db.prepare('SELECT credits FROM members WHERE id=?').get(b.member_id);if(m.credits<=0)throw new Error('Üyenin ders hakkı yok');db.prepare('UPDATE members SET credits=credits-1 WHERE id=?').run(b.member_id)}db.prepare('UPDATE bookings SET status=? WHERE id=?').run(status,id);log('Yoklama',`${b.member_id} → ${status}`);return {status}}
+ if(method==='POST'&&pathname==='/api/bookings'){
+  required(body,'member_id','class_id');
+  db.exec('BEGIN IMMEDIATE');
+  try {
+   const m=db.prepare('SELECT * FROM members WHERE id=?').get(Number(body.member_id));
+   const c=db.prepare('SELECT * FROM classes WHERE id=?').get(Number(body.class_id));
+   if(!m||!c)throw new Error('Üye veya ders bulunamadı');
+   if(m.status!=='Aktif'||m.expires<datePlus(0))throw new Error('Üyelik aktif değil');
+   if(m.credits<=0)throw new Error('Ders hakkı kalmadı');
+   const existing=db.prepare('SELECT * FROM bookings WHERE member_id=? AND class_id=?').get(m.id,c.id);
+   if(existing&&existing.status!=='cancelled')throw new Error('Bu derse zaten kayıtlısınız');
+   const count=db.prepare("SELECT count(*) n FROM bookings WHERE class_id=? AND status IN ('reserved','attended')").get(c.id).n;
+   const status=count>=c.capacity?'waitlist':'reserved';
+   if(existing)db.prepare('UPDATE bookings SET status=? WHERE id=?').run(status,existing.id);
+   else db.prepare('INSERT INTO bookings(member_id,class_id,status) VALUES(?,?,?)').run(m.id,c.id,status);
+   log('Rezervasyon',`${m.name} - ${c.title} (${status})`);
+   db.exec('COMMIT');return {status};
+  } catch(e){db.exec('ROLLBACK');throw e}
+ }
+ if(method==='POST'&&/^\/api\/bookings\/\d+\/cancel$/.test(pathname)){
+  const id=Number(pathname.split('/')[3]);
+  db.exec('BEGIN IMMEDIATE');
+  try {
+   const b=db.prepare('SELECT * FROM bookings WHERE id=?').get(id);
+   if(!b||!['reserved','waitlist','absent'].includes(b.status))throw new Error('Rezervasyon iptal edilemiyor');
+   db.prepare("UPDATE bookings SET status='cancelled' WHERE id=?").run(id);
+   if(b.status==='reserved'){
+    const next=db.prepare("SELECT b.id FROM bookings b JOIN members m ON m.id=b.member_id WHERE b.class_id=? AND b.status='waitlist' AND m.status='Aktif' AND m.expires>=? AND m.credits>0 ORDER BY b.id LIMIT 1").get(b.class_id,datePlus(0));
+    if(next)db.prepare("UPDATE bookings SET status='reserved' WHERE id=?").run(next.id);
+   }
+   log('Rezervasyon iptali',String(id));
+   db.exec('COMMIT');return {ok:true};
+  } catch(e){db.exec('ROLLBACK');throw e}
+ }
+ if(method==='POST'&&/^\/api\/bookings\/\d+\/attendance$/.test(pathname)){
+  const id=Number(pathname.split('/')[3]);
+  if(typeof body.present!=='boolean')throw new Error('present true/false olmalı');
+  db.exec('BEGIN IMMEDIATE');
+  try {
+   const b=db.prepare('SELECT * FROM bookings WHERE id=?').get(id);
+   if(!b)throw new Error('Rezervasyon bulunamadı');
+   if(b.status==='cancelled'||b.status==='waitlist')throw new Error('Rezervasyon yoklamaya uygun değil');
+   const status=body.present?'attended':'absent';
+   if(b.status==='attended'&&status!=='attended')throw new Error('İşlenmiş yoklama değiştirilemez');
+   if(b.status!=='attended'&&status==='attended'){
+    const updated=db.prepare('UPDATE members SET credits=credits-1 WHERE id=? AND credits>0').run(b.member_id);
+    if(updated.changes!==1)throw new Error('Üyenin ders hakkı yok');
+   }
+   db.prepare('UPDATE bookings SET status=? WHERE id=?').run(status,id);
+   log('Yoklama',`${b.member_id} → ${status}`);
+   db.exec('COMMIT');return {status};
+  }catch(e){db.exec('ROLLBACK');throw e}
+ }
  if(method==='POST'&&pathname==='/api/checkins'){required(body,'member_id');const m=db.prepare('SELECT * FROM members WHERE id=?').get(Number(body.member_id));if(!m||m.status!=='Aktif'||m.expires<datePlus(0))throw new Error('Aktif üyelik bulunamadı');db.prepare('INSERT INTO checkins(member_id) VALUES(?)').run(m.id);log('QR giriş',m.name);return {ok:true}}
  if(method==='POST'&&pathname==='/api/payments'){required(body,'member_id','amount','due_date');const r=db.prepare('INSERT INTO payments(member_id,amount,status,due_date) VALUES(?,?,?,?)').run(Number(body.member_id),Number(body.amount),'Bekliyor',body.due_date);return {id:Number(r.lastInsertRowid)}}
  if(method==='POST'&&/^\/api\/payments\/\d+\/pay$/.test(pathname)){const id=Number(pathname.split('/')[3]);db.prepare("UPDATE payments SET status='Ödendi',paid_at=? WHERE id=?").run(datePlus(0),id);log('Ödeme alındı',String(id));return {ok:true}}
