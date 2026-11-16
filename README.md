@@ -31,3 +31,14 @@ node server.js
 ```
 
 `node:sqlite` Node.js 26 sürümünde kullanılabilir. Portu değiştirmek için `PORT=3001 node server.js`.
+
+## V8 Beslenme ve sağlık (`/v8.html`)
+
+- Aranabilir besin/ürün kataloğu (Türkçe karakter duyarsız), gram veya porsiyon ile otomatik kalori ve makro hesabı
+- Günlük beslenme günlüğü, haftalık/aylık kalori grafikleri, günlük ve haftalık ortalama kartları
+- VKİ (DSÖ sınıflaması) ve Mifflin-St Jeor ile tahmini günlük enerji ihtiyacı (bilgiler kaydedilmez)
+- Yalnızca mevcut V6 uç noktalarını kullanır: `/api/v6/foods`, `/api/v6/food-logs`. Örnek besin değeri içermez; ürünler ambalaj etiketinden girilir.
+
+```bash
+node --test tests/
+```
