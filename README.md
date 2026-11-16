@@ -342,3 +342,42 @@ Türkçe mesajlarla `502` olarak döner. Örneğin HTTP 503 için:
 Başarısız kaynak isteği ürün kaydetmez, sahte besin verisi döndürmez ve başarılı
 boş arama gibi gösterilmez. Testler kaynak hatalarını ve zaman aşımını mock
 yanıtlarla denetler; gerçek kullanıcı veritabanı kullanılmaz.
+
+## Yönetici ana sayfası — ortak dashboard
+
+Ana uygulamada yönetici girişi **Genel bakış** sayfasını açar. `/v7.html` genel
+bakışı da aynı `dashboard.js` / `dashboard.css` bileşenini kullanır. Üstte aktif
+üye, seçili ayın tahsilatı, tüm bekleyen ödemeler, bugünkü girişler ve 7 gün içinde
+bitecek aktif üyelikler bulunur. Ortada tahsilat ve yoklama devamlılığı; altta ders
+doluluğu, ödeme düzeni ve yaklaşan bitiş listesi gösterilir.
+
+- Kaynaklar mevcut `/api/me`, `/api/state`, `/api/v6/analytics` uçlarıdır. Yeni
+  endpoint veya veritabanı değişikliği yoktur; dashboard veri yazmaz.
+- Aylık görünüm seçilen ayın günlerini önceki ayla; yıllık görünüm seçilen yılın
+  aylarını önceki yılla karşılaştırır. Yıl/ay seçilebilir, karşılaştırma kapatılabilir.
+  Yıllık görünümde ay seçimi üstteki aylık tahsilat kartına uygulanır.
+- Devam eden dönem önceki dönemin tamamıyla karşılaştırılır. Henüz gelmemiş
+  günler/aylar ve var olmayan takvim günleri sıfır gibi gösterilmez. Sıfır,
+  API kayıtlarında işlem bulunmayan geçmiş dönemdir. İşlenmiş yoklama yoksa
+  devamlılık yüzdesi yerine “Veri yok” gösterilir.
+- Devamlılık = geldi / (geldi + gelmedi). Doluluk = toplam dolu kontenjan /
+  toplam kontenjan; derslerin yüzdelerinin basit ortalaması alınmaz.
+- Ders API'si son 30 günden itibaren, en fazla 10.000 ders döndürür. Eski dönem
+  dolulukları tam geçmiş değildir; ekranda kısmi tarihçe uyarısı gösterilir.
+  Önceki dönem dolulukları da yalnızca erişilebilir kayıtlarla ve kapsam etiketiyle
+  sunulur. İptal/bekleme listesi dolu kontenjana dahil değildir.
+- Ödeme düzeninde payda seçilen dönemde vadeli tüm ödemelerdir. Ödeme tarihi
+  eksik bir kayıt zamanında ödendi kabul edilmez; ayrıca listelenir. Tahsilat
+  grafiklerinde mevcut analitik API'siyle uyumlu olarak ödeme tarihi eksikse
+  vade tarihi kullanılır. Analitik yükleme hatası sıfır veriye dönüştürülmez;
+  hata mesajı ve kullanılamayan grafik durumu gösterilir.
+- Mobilde kartlar tek/iki kolona iner. Uzun grafik ve tablolar kendi alanlarında
+  yatay kaydırılır. Grafiklerin erişilebilir tablo karşılıkları ve etiketli,
+  klavyeyle kullanılabilen dönem kontrolleri vardır.
+
+Doğrulama: `node --test`. Dashboard testleri hesapları, artık yıl/yıl geçişini,
+API hatasını, güvenli metin çıktısını, yönetici girişi sonrası varsayılan ekranı,
+filtre değişikliklerini ve ortak V7 entegrasyonunu kontrol eder. V8 beslenme
+backend testleri de aynı komutta korunmuştur. Chrome görsel testi bu çalışma
+kapsamında kullanıcı isteğiyle atlanmıştır. Testler yalnızca bellek veritabanı
+kullanır; localhost:3000 sunucusu ve gerçek SQLite dosyaları kullanılmaz.
