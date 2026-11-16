@@ -4,7 +4,8 @@ const path = require('node:path');
 const { DatabaseSync } = require('node:sqlite');
 const { randomUUID, randomBytes, scryptSync, timingSafeEqual, createHash } = require('node:crypto');
 const ROOT = __dirname;
-const DBFILE = path.join(ROOT, 'fitness.sqlite');
+const DBFILE = process.env.FITNESS_DB_PATH || path.join(ROOT, 'fitness.sqlite');
+if (process.env.NODE_ENV === 'test' && (!process.env.FITNESS_DB_PATH || path.resolve(DBFILE) === path.join(ROOT, 'fitness.sqlite'))) throw Error('Testler ayrı FITNESS_DB_PATH gerektirir');
 const db = new DatabaseSync(DBFILE);
 db.exec(`PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;
 CREATE TABLE IF NOT EXISTS members(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,phone TEXT DEFAULT '',email TEXT DEFAULT '',plan TEXT NOT NULL DEFAULT 'Aylık + 8 Ders',expires TEXT NOT NULL,credits INTEGER NOT NULL DEFAULT 8,status TEXT NOT NULL DEFAULT 'Aktif',created_at TEXT DEFAULT CURRENT_TIMESTAMP);
@@ -223,6 +224,7 @@ function api(method,pathname,body,u){
  if(method==='POST'&&pathname==='/api/announcements'){required(body,'title','body');db.prepare('INSERT INTO announcements(title,body) VALUES(?,?)').run(body.title,body.body);return {ok:true}}
  throw new Error('Endpoint bulunamadı');
 }
+const nutrition = require('./backend/nutrition')(db);
 const mime={'.html':'text/html; charset=utf-8','.js':'application/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.ico':'image/x-icon'};
 const server=http.createServer(async(req,res)=>{try{
  const url=new URL(req.url,'http://localhost');
@@ -250,10 +252,12 @@ const server=http.createServer(async(req,res)=>{try{
    res.setHeader('Set-Cookie','fc_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0');return send(res,200,{ok:true});
   }
   if(!u&&url.pathname!=='/api/me'){const e=Error('Oturum açmanız gerekiyor');e.status=401;throw e}
+  if(url.pathname.startsWith('/api/v8/')) return send(res,200,await nutrition(req.method,url.pathname,req.method==='GET'?Object.fromEntries(url.searchParams):body,u));
   return send(res,200,api(req.method,url.pathname,req.method==='GET'?{...body,member_id:url.searchParams.get('member_id')}:body,u));
  }
  const file=path.resolve(ROOT,'public',url.pathname==='/'?'index.html':'.'+decodeURIComponent(url.pathname));
  if(!file.startsWith(path.join(ROOT,'public')+path.sep)){res.writeHead(403);return res.end('Yasak')}
  const stat=fs.statSync(file);if(!stat.isFile())throw Error('Bulunamadı');res.writeHead(200,{'Content-Type':mime[path.extname(file)]||'application/octet-stream'});fs.createReadStream(file).pipe(res);
  }catch(e){if(req.url.startsWith('/api/'))send(res,e.status||400,{error:e.message});else{res.writeHead(404);res.end('Bulunamadı')}}});
-const PORT=Number(process.env.PORT||3000);server.listen(PORT,()=>console.log(`\n✅ FORM CLUB hazır: http://localhost:${PORT}\n📁 Veritabanı: ${DBFILE}\n`));
+module.exports = { server, db };
+const PORT=Number(process.env.PORT||3000);if(require.main===module)server.listen(PORT,()=>console.log(`\n✅ FORM CLUB hazır: http://localhost:${PORT}\n📁 Veritabanı: ${DBFILE}\n`));
