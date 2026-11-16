@@ -1,0 +1,52 @@
+/* FORM CLUB V8 — nutrition & health screens. Builds on v7.css tokens and layout. */
+input,textarea{font:inherit}
+input:focus-visible{outline:3px solid #d4ff4b;outline-offset:2px}
+.field{display:flex;flex-direction:column;gap:6px;font-size:12px;color:#a3b3a5;font-weight:700;min-width:0}
+.field input,.field select{background:#101b12;color:#f6fff0;border:1px solid #3a4b3a;padding:11px 12px;border-radius:10px;width:100%;font-size:15px}
+.field small{font-weight:400;color:#849788}
+.form-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:14px}
+.search{position:relative;margin-bottom:14px}
+.search input{width:100%;background:#101b12;color:#f6fff0;border:1px solid #3a4b3a;border-radius:12px;padding:14px 14px 14px 42px;font-size:16px}
+.search::before{content:'⌕';position:absolute;left:15px;top:50%;transform:translateY(-50%);color:#90a48e;font-size:18px}
+.food-list{display:flex;flex-direction:column;gap:8px;max-height:460px;overflow:auto;padding-right:4px}
+.food-item{display:flex;justify-content:space-between;align-items:center;gap:12px;text-align:left;width:100%;background:#19251c;border:1px solid #2c3e2d;border-radius:12px;padding:12px 14px;color:#e9f3e8}
+.food-item:hover{border-color:#5f7c4a}
+.food-item[aria-pressed="true"]{border-color:#d4ff4b;background:#22311f}
+.food-item b{display:block;overflow-wrap:anywhere}
+.food-item .macro{font-size:11px;color:#9db09e}
+.food-item .kcal{font:800 16px Outfit;white-space:nowrap;color:#d4ff4b}
+.seg{display:inline-flex;border:1px solid #3c503d;border-radius:11px;overflow:hidden;margin-bottom:14px}
+.seg button{background:transparent;border:0;color:#b8cabb;padding:9px 14px;font-weight:800}
+.seg button[aria-pressed="true"]{background:#d4ff4b;color:#1b2915}
+.calc-out{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:14px 0}
+.calc-out div{background:#101b12;border:1px solid #2c3e2d;border-radius:12px;padding:12px;text-align:center}
+.calc-out b{display:block;font:800 22px Outfit;color:#f2faec}
+.calc-out span{font-size:11px;color:#9db09e}
+.calc-out .hero b{color:#d4ff4b}
+.daynav{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.daynav input{background:#101b12;color:#f6fff0;border:1px solid #3a4b3a;border-radius:10px;padding:9px}
+.log-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid #2b3b2c}
+.log-row>div{flex:1;min-width:0}
+.log-row b{overflow-wrap:anywhere}
+.log-row .kcal{font:800 17px Outfit;white-space:nowrap}
+.btn.small{padding:7px 10px;font-size:12px}
+.btn.ghost{background:transparent}
+.btn[disabled]{opacity:.45;cursor:not-allowed;filter:none}
+.bars.dense{gap:4px}
+.bars.dense .barcol{min-width:14px}
+.bars.dense .barv{display:none}
+.barcol.nodata small{color:#5f6f60}
+.barcol.target-over .bar{background:linear-gradient(#ffb35c,#a8662a)}
+.bmi-scale{position:relative;height:14px;border-radius:9px;background:linear-gradient(90deg,#72c7e5 0 14%,#8fd16a 14% 40%,#ffcf5c 40% 60%,#ff8a5c 60% 100%);margin:18px 0 6px}
+.bmi-scale i{position:absolute;top:-6px;width:4px;height:26px;border-radius:3px;background:#f6fff0;box-shadow:0 0 0 2px #090e0b;transform:translateX(-2px)}
+.bmi-ticks{position:relative;height:14px;font-size:10px;color:#9db09e}.bmi-ticks span{position:absolute;transform:translateX(-50%)}
+.big{font:800 46px Outfit;letter-spacing:-1.5px;margin:6px 0}
+.status{display:inline-flex;gap:6px;align-items:center;border-radius:22px;padding:6px 11px;font-size:12px;font-weight:800;background:#2b4025;color:#d4ff78}
+.status.warn{background:#4a3a1d;color:#ffd68a}
+.status.info{background:#1d3a44;color:#a9e6f7}
+details.datatable{margin-top:12px}
+details.datatable summary{cursor:pointer;color:#b1c5b4;font-size:12px;font-weight:700}
+.progress{height:10px;background:#304335;border-radius:9px;overflow:hidden;margin:10px 0 6px}
+.progress>i{display:block;height:100%;background:#d4ff4b}
+.progress.over>i{background:#ffb35c}
+@media(max-width:700px){.calc-out{grid-template-columns:repeat(2,minmax(0,1fr))}.big{font-size:38px}.food-list{max-height:none}.search input{font-size:16px}}
