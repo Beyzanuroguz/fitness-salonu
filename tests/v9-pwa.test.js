@@ -48,3 +48,28 @@ test('service worker precaches existing files, never caches /api/ and stays insi
 test('V9 does not touch V7/V8 entry pages', () => {
   for (const page of ['index.html', 'v7.html', 'v8.html']) assert.doesNotMatch(fs.readFileSync(file(page), 'utf8'), /serviceWorker|manifest/);
 });
+
+test('worker bypasses personal APIs, unknown resources and query URLs at runtime', async () => {
+  const vm = require('node:vm');
+  const handlers = {}, writes = [];
+  const context = {
+    URL, Response,
+    self: { location: { origin: 'https://club.test' }, addEventListener: (name, fn) => { handlers[name] = fn; } },
+    caches: { match: async () => undefined, open: async () => ({ put: async (...args) => writes.push(args) }) },
+    fetch: async () => new Response('static', { headers: { 'Cache-Control': 'no-store' } })
+  };
+  vm.runInNewContext(fs.readFileSync(file('/v9/sw.js'), 'utf8'), context);
+  for (const pathname of ['/api/v9/qr', '/api/v9/reminders', '/api/v9/teacher/reports/monthly', '/v9/profile.json', '/v9/v9.js?token=secret']) {
+    let intercepted = false;
+    handlers.fetch({ request: { method: 'GET', url: 'https://club.test' + pathname }, respondWith: () => { intercepted = true; } });
+    assert.equal(intercepted, false, pathname);
+  }
+  let pending;
+  handlers.fetch({ request: { method: 'GET', url: 'https://club.test/v9/v9.js' }, respondWith: p => { pending = p; } });
+  await pending;
+  assert.equal(writes.length, 0, 'no-store responses never enter Cache Storage');
+  context.fetch = async () => new Response('static');
+  handlers.fetch({ request: { method: 'GET', url: 'https://club.test/v9/v9.js' }, respondWith: p => { pending = p; } });
+  await pending;
+  assert.equal(writes.length, 1, 'allowlisted static assets may be cached');
+});

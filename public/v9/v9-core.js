@@ -1,29 +1,22 @@
 /* FORM CLUB V9 - pure helpers shared by the browser (window.V9Core) and node:test.
    All V9 API knowledge lives here so a contract change from the backend is a one-file edit.
-   Contract (backend/v9.js):
-     GET  /api/v9/qr                      -> { token, expires_in }                      member only
-     POST /api/v9/checkin { token }       -> { ok, member, checked_in_at }              admin, teacher
-     GET  /api/v9/notifications           -> [{ id, title, detail, date, read }]
-     POST /api/v9/notifications/read {id} -> { ok }
-     GET  /api/v9/trainer-report?year&month[&trainer_id]
-          -> { trainer:{id,name}, year, month, class_count, completed_classes, attendance,
-               occupancy_percent, classes:[{ id, title, starts_at, capacity, reservations, attended }] } */
+   Uses the canonical member QR/reminder and teacher monthly report API. */
 (function (global) {
 'use strict';
 const ENDPOINTS = {
   qr: '/api/v9/qr',
-  checkin: '/api/v9/checkin',
-  notifications: '/api/v9/notifications',
-  notificationRead: '/api/v9/notifications/read',
-  trainerReport: '/api/v9/trainer-report'
+  checkin: '/api/v9/qr/verify',
+  notifications: '/api/v9/reminders',
+  notificationRead: '/api/v9/reminders/read',
+  trainerReport: '/api/v9/teacher/reports/monthly'
 };
 const num = v => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 const pad = v => String(v).padStart(2, '0');
 
-// Same shape the backend accepts: base64url payload + "." + base64url HMAC, max 1500 chars.
+// Opaque 32-byte token; the server stores only its SHA-256 hash.
 function isToken(value) {
   const s = String(value || '').trim();
-  return s.length > 0 && s.length <= 1500 && /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(s);
+  return /^[a-f0-9]{64}$/.test(s);
 }
 function normalizeQR(r) {
   if (!r || !isToken(r.token)) throw Error('Sunucu geçersiz QR yanıtı verdi');
@@ -49,13 +42,14 @@ function scanErrorText(error) {
 
 function noticeKind(id) {
   const prefix = String(id || '').split(':')[0];
-  if (prefix === 'expiry' || prefix === 'member-expiry') return 'expiry';
-  if (prefix === 'booking' || prefix === 'teacher-class') return 'class';
+  if (prefix === 'membership' || prefix === 'expiry' || prefix === 'member-expiry') return 'expiry';
+  if (prefix === 'class' || prefix === 'booking' || prefix === 'teacher-class') return 'class';
   if (prefix === 'payment' || prefix === 'admin-payment') return 'payment';
   return 'other';
 }
 // Unread first, then the soonest date first; ties keep server order.
 function normalizeNotifications(list) {
+  if (list && Array.isArray(list.reminders)) list = list.reminders.map(n => ({ ...n, title: n.message, detail: n.title || (n.amount == null ? '' : `${n.amount} ₺`), date: n.due_at }));
   return (Array.isArray(list) ? list : [])
     .filter(n => n && n.id != null && n.title)
     .map((n, i) => ({ id: String(n.id), title: String(n.title), detail: String(n.detail || ''), date: String(n.date || ''), read: n.read === true, kind: noticeKind(n.id), i }))
@@ -90,18 +84,21 @@ function shiftMonth(year, month, delta) {
 function monthsBack(year, month, count) {
   return Array.from({ length: count }, (_, i) => shiftMonth(year, month, i - count + 1));
 }
-function reportQuery(year, month, trainerId) {
-  const q = new URLSearchParams({ year: String(year), month: String(month) });
-  if (trainerId != null && trainerId !== '') q.set('trainer_id', String(trainerId));
+function reportQuery(year, month) {
+  const q = new URLSearchParams({ month: `${year}-${pad(month)}` });
   return `${ENDPOINTS.trainerReport}?${q}`;
 }
 function normalizeReport(r) {
   if (!r || typeof r !== 'object') throw Error('Sunucu geçersiz rapor yanıtı verdi');
+  if (typeof r.month === 'string') {
+    const [year, month] = r.month.split('-').map(Number);
+    r = { ...r, year, month, attendance: r.attended, completed_classes: null, classes: (r.classes || []).map(c => ({ ...c, reservations: c.booked })) };
+  }
   const classes = (Array.isArray(r.classes) ? r.classes : []).map(c => ({
     id: c.id, title: String(c.title || 'Ders'), starts_at: String(c.starts_at || ''),
     capacity: num(c.capacity), reservations: num(c.reservations), attended: num(c.attended)
   }));
-  const completed = num(r.completed_classes);
+  const completed = r.completed_classes == null ? classes.filter(c => Date.parse(c.starts_at + (/Z$|[+-]\d\d:\d\d$/.test(c.starts_at) ? '' : '+03:00')) <= Date.now()).length : num(r.completed_classes);
   const doneReservations = classes.slice(0, completed).reduce((s, c) => s + c.reservations, 0);
   return {
     trainer: r.trainer && typeof r.trainer === 'object' ? { id: r.trainer.id, name: String(r.trainer.name || '') } : { id: null, name: '' },
@@ -109,7 +106,7 @@ function normalizeReport(r) {
     class_count: num(r.class_count), completed_classes: completed,
     attendance: num(r.attendance), occupancy_percent: num(r.occupancy_percent),
     // Show-up rate among reservations of classes that already took place (classes are ordered by start time).
-    show_rate: doneReservations ? Math.round(100 * num(r.attendance) / doneReservations) : null,
+    show_rate: r.attendance_percent !== undefined ? r.attendance_percent : doneReservations ? Math.round(100 * num(r.attendance) / doneReservations) : null,
     classes
   };
 }

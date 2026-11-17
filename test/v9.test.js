@@ -5,13 +5,14 @@ process.env.NODE_ENV = 'test';
 process.env.FITNESS_DB_PATH = ':memory:';
 const { server, db } = require('../server');
 const createV9 = require('../backend/v9');
+const K = require('../public/v9/v9-core');
 let base;
 function client() {
   let cookie;
   return async (path, method = 'GET', body, extra = {}) => {
     const r = await fetch(base + path, { method, headers: { 'Content-Type': 'application/json', ...(cookie ? { cookie } : {}), ...extra }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
     if (r.headers.get('set-cookie')) cookie = r.headers.get('set-cookie').split(';')[0];
-    return { status: r.status, data: await r.json(), cookie: r.headers.get('set-cookie') };
+    return { status: r.status, data: await r.json(), cookie: r.headers.get('set-cookie'), cacheControl: r.headers.get('cache-control') };
   };
 }
 test.before(async () => { server.listen(0, '127.0.0.1'); await once(server, 'listening'); base = `http://127.0.0.1:${server.address().port}`; });
@@ -27,7 +28,7 @@ test('V9 HTTP authorization, QR expiry/replay/revocation, reminders and scoped r
   }
   for (const [c,username] of [[member,'member'],[other,'other'],[teacher,'teacher']]) assert.equal((await c('/api/login','POST',{username,password:'test-password-123'})).status,200);
   db.prepare("UPDATE members SET expires='2099-12-31' WHERE id IN (1,2)").run();
-  const issue = async () => { const r = await member('/api/v9/qr','POST',{}); assert.equal(r.status,200); assert.equal(r.data.expires_in,60); return r.data.token; };
+  const issue = async () => { const r = await member('/api/v9/qr','POST',{}); assert.equal(r.status,200); assert.equal(r.data.expires_in,60); assert.equal(r.cacheControl,'no-store'); assert.ok(K.isToken(K.normalizeQR(r.data).token)); return r.data.token; };
   assert.equal((await admin('/api/v9/qr','POST',{})).status,403);
   assert.equal((await teacher('/api/v9/qr','POST',{})).status,403);
   assert.equal((await member('/api/v9/qr','POST',{member_id:2})).status,403);
@@ -100,5 +101,19 @@ test('V9 HTTP authorization, QR expiry/replay/revocation, reminders and scoped r
   assert.throws(()=>call('GET','/teacher/reports/monthly',{trainer_id:2},tu),e=>e.status===403);
   for (const c of [member,admin]) assert.equal((await c('/api/v9/teacher/reports/monthly?month=2028-02')).status,403);
   assert.equal((await teacher('/api/v9/teacher/reports/monthly?month=2028-02')).data.class_count,2);
+  const noticeResponse = await member(K.ENDPOINTS.notifications);
+  assert.equal(noticeResponse.status,200);
+  assert.equal(noticeResponse.cacheControl,'no-store');
+  // Re-enable a pending member payment for HTTP read/list roundtrip.
+  db.exec("UPDATE payments SET status='Bekliyor',due_date='2000-01-01' WHERE member_id=1;");
+  const notes = K.normalizeNotifications((await member(K.ENDPOINTS.notifications)).data);
+  assert.ok(notes.length);
+  assert.equal((await member(K.ENDPOINTS.notificationRead,'POST',{id:notes[0].id})).status,200);
+  assert.ok(K.normalizeNotifications((await member(K.ENDPOINTS.notifications)).data).find(n=>n.id===notes[0].id).read);
+  assert.equal((await other(K.ENDPOINTS.notificationRead,'POST',{id:notes[0].id})).status,404);
+  const reportResponse = await teacher(K.reportQuery(2028,2));
+  assert.equal(reportResponse.cacheControl,'no-store');
+  assert.deepEqual(K.normalizeReport(reportResponse.data).classes.map(c=>c.id),[101,102]);
+  assert.equal((await teacher(K.reportQuery(2028,2)+'&trainer_id=2')).status,403);
   assert.equal((await member('/api/v9/unknown')).status,404);
 });

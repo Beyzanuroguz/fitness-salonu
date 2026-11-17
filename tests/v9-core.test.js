@@ -4,10 +4,10 @@ const assert = require('node:assert/strict');
 const K = require('../public/v9/v9-core.js');
 
 test('QR token shape matches the backend check and refresh happens before expiry', () => {
-  assert.equal(K.isToken('eyJtIjoxfQ.abc_DEF-123'), true);
+  assert.equal(K.isToken('a'.repeat(64)), true);
   for (const bad of ['', 'no-dot', 'a.b.c', 'a .b', 'a.b=', 'x'.repeat(1499) + '.b']) assert.equal(K.isToken(bad), false, bad);
-  assert.deepEqual(K.normalizeQR({ token: 'abc.def', expires_in: 60 }), { token: 'abc.def', expiresIn: 60 });
-  assert.equal(K.normalizeQR({ token: 'abc.def' }).expiresIn, 60);
+  assert.deepEqual(K.normalizeQR({ token: 'b'.repeat(64), expires_in: 60 }), { token: 'b'.repeat(64), expiresIn: 60 });
+  assert.equal(K.normalizeQR({ token: 'b'.repeat(64) }).expiresIn, 60);
   assert.throws(() => K.normalizeQR({ token: '<script>' }));
   assert.equal(K.refreshDelayMs(60), 55000);
   assert.equal(K.refreshDelayMs(3), 1000);
@@ -48,8 +48,8 @@ test('relative day labels use local calendar days', () => {
 test('trainer report: month math, query string, derived show rate', () => {
   assert.deepEqual(K.shiftMonth(2026, 1, -1), { year: 2025, month: 12 });
   assert.deepEqual(K.monthsBack(2026, 2, 3), [{ year: 2025, month: 12 }, { year: 2026, month: 1 }, { year: 2026, month: 2 }]);
-  assert.equal(K.reportQuery(2026, 11, 3), '/api/v9/trainer-report?year=2026&month=11&trainer_id=3');
-  assert.equal(K.reportQuery(2026, 11, null), '/api/v9/trainer-report?year=2026&month=11');
+  assert.equal(K.reportQuery(2026, 11, 3), '/api/v9/teacher/reports/monthly?month=2026-11');
+  assert.equal(K.reportQuery(2026, 11, null), '/api/v9/teacher/reports/monthly?month=2026-11');
   const r = K.normalizeReport({ trainer: { id: 1, name: 'Ece' }, year: 2026, month: 11, class_count: 3, completed_classes: 2, attendance: 6, occupancy_percent: 50,
     classes: [{ id: 1, title: 'A', starts_at: '2026-11-02T10:00', capacity: 10, reservations: 4, attended: 3 }, { id: 2, title: 'B', starts_at: '2026-11-09T10:00', capacity: 10, reservations: 4, attended: 3 }, { id: 3, title: 'C', starts_at: '2026-11-30T10:00', capacity: 10, reservations: 7, attended: 0 }] });
   assert.equal(r.show_rate, 75); // 6 attended of 8 reservations in the two finished classes

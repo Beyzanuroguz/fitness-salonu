@@ -75,8 +75,10 @@ const staff = () => S.role === 'admin' || S.role === 'teacher';
 function pages() {
   const list = [];
   if (S.role === 'member') list.push(['qr', 'QR kodum', 'qr']);
-  if (staff()) list.push(['scan', 'QR okut', 'scan'], ['performance', 'Performans', 'chart']);
-  list.push(['notifications', 'Bildirimler', 'bell'], ['more', 'Diğer', 'more']);
+  if (S.role === 'admin') list.push(['scan', 'QR okut', 'scan']);
+  if (S.role === 'teacher') list.push(['performance', 'Performans', 'chart']);
+  if (S.role === 'member') list.push(['notifications', 'Bildirimler', 'bell']);
+  list.push(['more', 'Diğer', 'more']);
   return list;
 }
 const TITLES = {
@@ -236,7 +238,7 @@ async function fetchQR() {
   clearTimeout(qrTimer);
   S.qr.loading = true;
   try {
-    const r = K.normalizeQR(await api(K.ENDPOINTS.qr));
+    const r = K.normalizeQR(await api(K.ENDPOINTS.qr, { method: 'POST', body: {} }));
     Object.assign(S.qr, { token: r.token, ttl: r.expiresIn, expiresAt: Date.now() + r.expiresIn * 1000, error: '', missing: false, loading: false });
     if (S.view === 'qr') { if (!$('qr-frame')) render(); else paintQR(); }
     qrTimer = setTimeout(() => { if (S.view === 'qr' && !document.hidden) fetchQR(); }, K.refreshDelayMs(r.expiresIn));
@@ -387,6 +389,7 @@ function updateScanUI() {
 /* ---------- Notifications ---------- */
 let noteTimer = 0;
 async function loadNotifications() {
+  if (S.role !== 'member') return;
   try {
     S.notes = K.normalizeNotifications(await api(K.ENDPOINTS.notifications));
     S.notesLoaded = true; S.notesError = ''; S.notesMissing = false;
@@ -458,14 +461,14 @@ function perfView() {
   const kpi = (label, value, foot) => `<article class="card kpi"><div class="label">${esc(label)}</div><div class="value">${esc(value)}</div><div class="foot">${esc(foot)}</div></article>`;
   return `${controls}
   ${S.role === 'admin' && d.trainer.name ? '' : d.trainer.name ? `<p class="muted" style="margin:-4px 0 12px">${esc(d.trainer.name)}</p>` : ''}
-  <div class="kpis">${kpi('Ders', int(d.class_count), `${int(d.completed_classes)} tamamlandı`)}${kpi('Katılım', int(d.attendance), 'Tamamlanan derslerde gelen üye')}${kpi('Doluluk', `%${int(d.occupancy_percent)}`, 'Rezervasyon / kapasite')}${kpi('Gelme oranı', d.show_rate == null ? '—' : `%${int(d.show_rate)}`, 'Katılım / rezervasyon (geçmiş dersler)')}</div>
+  <div class="kpis">${kpi('Ders', int(d.class_count), `${int(d.completed_classes)} tamamlandı`)}${kpi('Katılım', int(d.attendance), 'Geldi işaretlenen üyeler')}${kpi('Doluluk', `%${int(d.occupancy_percent)}`, 'Rezervasyon / kapasite')}${kpi('Gelme oranı', d.show_rate == null ? '—' : `%${int(d.show_rate)}`, 'Geldi / yoklaması işaretlenen')}</div>
   <section class="card section"><div class="cardtop"><h2>Ders bazında rezervasyon ve katılım</h2>${r.loading ? '<span class="pill">Yenileniyor…</span>' : ''}</div>
     ${d.classes.length ? `<div class="legend"><span><i style="background:var(--s-res)"></i>Rezervasyon</span><span><i style="background:var(--s-att)"></i>Katılım</span><span><i class="cap"></i>Kapasite</span></div><div class="chart" id="chart-classes">${classChart(d.classes)}</div>
     <details style="margin-top:10px"><summary>Tablo görünümü</summary><div class="tablewrap"><table><thead><tr><th>Ders</th><th>Tarih</th><th>Kapasite</th><th>Rezervasyon</th><th>Katılım</th></tr></thead><tbody>${d.classes.map(c => `<tr><td>${esc(c.title)}</td><td>${esc(K.shortDate(c.starts_at))}</td><td>${int(c.capacity)}</td><td>${int(c.reservations)}</td><td>${int(c.attended)}</td></tr>`).join('')}</tbody></table></div></details>` : '<div class="empty">Bu ay için planlanmış ders yok.</div>'}
   </section>
   <div class="grid two"><section class="card"><h2>Doluluk · son 6 ay</h2><div class="chart" id="chart-occ">${trendChart(r.trend, 'occupancy_percent', v => `%${int(v)}`, 100)}</div></section>
   <section class="card"><h2>Katılım · son 6 ay</h2><div class="chart" id="chart-att">${trendChart(r.trend, 'attendance', v => int(v))}</div></section></div>
-  <p class="footnote">Doluluk, aydaki tüm derslerin (gelecek dersler dahil) rezervasyonlarının toplam kapasiteye oranıdır. Katılım yalnızca başlamış derslerde “geldi” işaretlenen üyeleri sayar.</p>`;
+  <p class="footnote">Doluluk, aydaki tüm derslerin (gelecek dersler dahil) rezervasyonlarının toplam kapasiteye oranıdır. Katılım “geldi” işaretlenen üyeleri sayar. Gelme oranı, geldi ve gelmedi olarak işaretlenen yoklamalar üzerinden hesaplanır.</p>`;
 }
 // Grouped bars per class (reservations, attended) with a dashed capacity tick. One y-axis (people).
 function classChart(classes) {

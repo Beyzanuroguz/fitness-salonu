@@ -2,7 +2,7 @@
    - App shell is precached; pages are network-first with an offline fallback.
    - Static V9 files use stale-while-revalidate.
    - /api/ requests are never cached: QR tokens, notifications and reports are personal and short-lived. */
-const VERSION = 'v9.0.0';
+const VERSION = 'v9.0.1';
 const PREFIX = 'formclub-v9-';
 const SHELL = PREFIX + 'shell-' + VERSION;
 const RUNTIME = PREFIX + 'runtime-' + VERSION;
@@ -13,6 +13,7 @@ const SHELL_FILES = [
   '/v9/v9.js',
   '/v9/manifest.webmanifest',
   '/v9/vendor/qrcode.js',
+  '/v9/vendor/jsQR.js',
   '/v9/icons/icon.svg',
   '/v9/icons/icon-192.png',
   '/v9/icons/apple-touch-icon.png'
@@ -57,11 +58,11 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  if (!url.pathname.startsWith('/v9/') || url.pathname === '/v9/sw.js') return;
+  if (!SHELL_FILES.includes(url.pathname) || url.search) return;
   event.respondWith((async () => {
     const cached = await caches.match(request, { ignoreSearch: true });
     const network = fetch(request).then(async response => {
-      if (response.ok) {
+      if (response.ok && !/no-store|private/i.test(response.headers.get('Cache-Control') || '')) {
         const cache = await caches.open(SHELL_FILES.includes(url.pathname) ? SHELL : RUNTIME);
         await cache.put(request, response.clone());
       }
