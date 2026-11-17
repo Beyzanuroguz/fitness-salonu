@@ -38,6 +38,16 @@ function searchFoods(foods, query) {
     .map(x => x.f);
 }
 
+// Products from /api/v8/foods/search are logged through the V6 catalogue (max 100-char names).
+// Reuse an existing catalogue row with the same name and the same per-100 g values instead of duplicating it.
+const MACROS = ['kcal_100g', 'protein_100g', 'carbs_100g', 'fat_100g'];
+function catalogName(product) { return String(product?.name || '').trim().slice(0, 100).trim(); }
+function findCatalogMatch(foods, product) {
+  const name = normalize(catalogName(product));
+  if (!name) return null;
+  return (Array.isArray(foods) ? foods : []).find(f => normalize(f.name) === name && MACROS.every(k => Math.abs(num(f[k] || 0) - num(product[k] || 0)) < 1e-6)) || null;
+}
+
 function dailyTotals(logs) {
   const map = new Map();
   for (const l of Array.isArray(logs) ? logs : []) {
@@ -114,6 +124,6 @@ function tdee(profile) {
   return { bmr: base, factor: act.factor, tdee: Math.round(base * act.factor) };
 }
 
-const api = { nutrientsFor, gramsFromPortion, logKcal, normalize, searchFoods, dailyTotals, daySeries, weekStart, monthStart, daysInMonth, shiftMonth, addDays, localISO, parseISO, dailyAverage, weeklyAverage, bmi, bmiCategory, ACTIVITY, bmr, tdee };
+const api = { nutrientsFor, gramsFromPortion, logKcal, normalize, searchFoods, catalogName, findCatalogMatch, dailyTotals, daySeries, weekStart, monthStart, daysInMonth, shiftMonth, addDays, localISO, parseISO, dailyAverage, weeklyAverage, bmi, bmiCategory, ACTIVITY, bmr, tdee };
 if (typeof module === 'object' && module.exports) module.exports = api; else global.V8Calc = api;
 })(typeof window !== 'undefined' ? window : globalThis);
