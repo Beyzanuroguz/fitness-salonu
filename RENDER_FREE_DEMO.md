@@ -26,6 +26,12 @@ sahibi kendisi onaylayıp yapar.
   olmazsa sunucu başlamaz. Bu sürümde gerçek ödeme, SMS, e-posta veya fiziksel turnike
   entegrasyonu zaten yoktur. Nutrition+ barkod araması Open Food Facts'e dışarı istek atar;
   bu ödeme veya mesaj göndermez.
+- Üç sanal turnike (`TURNSTILE_SIMULATION.md`) yalnızca kayıt tutan bir simülasyondur.
+  Gerçek kapı veya röle komutu yoktur. `TURNSTILE_ENABLED=0` zorunluluğu değişmedi;
+  sanal turnikeler bu bayrağa bağlı değildir.
+- **Turnike QR kimlikleri her yeniden başlatmada değişir.** Uyku, yeniden dağıtım veya
+  yeniden başlatma sonrasında basılı kodlar çalışmaz. Kodları Turnikeler ekranından yeniden
+  açın.
 - Arama motorları için `X-Robots-Tag: noindex` ve `/robots.txt` `Disallow: /` döner.
 
 ## Gerekli ortam değişkenleri

@@ -28,10 +28,12 @@ navItems.admin.push(['renewals','↻','Üyelik yenileme'],['reservations','▤',
 navItems.teacher.push(['attendance','✓','Yoklama'],['performance','▥','Performans raporum'],['notifications','◉','Bildirimler']);
 navItems.member.push(['notifications','◉','Bildirimler']);
 for(const r of ['admin','member','teacher'])navItems[r].push(['energy','◎','Kalori hedefim']);
+// Virtual turnstiles (simulation): admin manages gate QR codes, members scan them with the phone camera.
+navItems.admin.push(['turnstiles','⇆','Turnikeler']);navItems.member.push(['gate','⇆','Turnike QR Tara']);
 // Menu sections per role. Every navItems entry belongs to exactly one section (checked by tests).
 const navGroups={
- admin:[['Genel',['overview','insights','reports']],['Üyeler',['members','renewals','leads']],['Dersler',['classes','reservations','attendance']],['Giriş ve bildirimler',['scan','notifications']],['Ekip',['trainers','performance']],['İletişim',['announcements','community']],['Finans',['payments']],['Beslenme',['nutrition','energy']],['Yönetim',['settings']]],
- member:[['Genel',['home']],['Dersler',['lessons','memberCalendar','entry']],['Sağlık ve beslenme',['nutrition','energy','progress']],['Topluluk',['community','notifications']],['Hesap',['profile']]],
+ admin:[['Genel',['overview','insights','reports']],['Üyeler',['members','renewals','leads']],['Dersler',['classes','reservations','attendance']],['Giriş ve bildirimler',['scan','turnstiles','notifications']],['Ekip',['trainers','performance']],['İletişim',['announcements','community']],['Finans',['payments']],['Beslenme',['nutrition','energy']],['Yönetim',['settings']]],
+ member:[['Genel',['home','gate']],['Dersler',['lessons','memberCalendar','entry']],['Sağlık ve beslenme',['nutrition','energy','progress']],['Topluluk',['community','notifications']],['Hesap',['profile']]],
  teacher:[['Genel',['today']],['Dersler',['calendar','attendance','students']],['Performans',['performance']],['Topluluk',['community','notifications']],['Sağlık',['energy']],['Hesap',['profile']]]
 };
 const roleNames={admin:'Yönetici',member:'Üye',teacher:'Eğitmen'};
@@ -55,6 +57,7 @@ function installHint(){try{const nav=globalThis.navigator||{},standalone=globalT
 function content(){
  if(page==='nutrition')return energySummary()+moduleFrame('/nutrition/?embedded=1','Nutrition+');
  if(page==='energy')return energyView();
+ if(page==='turnstiles'||page==='gate')return moduleFrame('/turnstiles/?embedded=1#'+page,navItems[role].find(x=>x[0]===page)?.[2]||page);
  if(['entry','scan','performance','notifications'].includes(page))return moduleFrame('/v9/index.html?embedded=1#'+(page==='entry'?'qr':page),navItems[role].find(x=>x[0]===page)?.[2]||page);
  if(page==='renewals')return memberList();
  if(page==='attendance')return attendanceView();

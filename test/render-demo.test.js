@@ -55,3 +55,19 @@ test('render demo resets on restart and refuses to touch a non-demo database',as
  const foreign=path.join(dir,'customer.sqlite');const d=new DatabaseSync(foreign);d.exec("CREATE TABLE members(id INTEGER PRIMARY KEY,name TEXT);INSERT INTO members(name) VALUES('Gerçek Müşteri')");d.close();
  const bytes=fs.readFileSync(foreign);await assert.rejects(boot({...env,FITNESS_DB_PATH:foreign}),/startup refused/);assert.deepEqual(fs.readFileSync(foreign),bytes);
 });
+
+test('render demo: virtual turnstiles work with demo accounts, stay simulation-only and get new QR ids on every restart',async t=>{
+ const {env}=fixture(t);let app=await boot(env);
+ const login=async role=>(await call(app.base,'/api/login','POST',{username:'demo-'+role,password:env[`DEMO_${role.toUpperCase()}_PASSWORD`]})).cookie;
+ let admin=await login('admin');const member=await login('member');
+ const first=(await call(app.base,'/api/turnstiles','GET',null,admin)).data;assert.equal(first.simulation,true);assert.equal(first.turnstiles.length,3);
+ const pass=(await call(app.base,'/api/turnstiles/scan','POST',{code:first.turnstiles[1].qr,idempotency_key:'render-demo-0001'},member)).data;
+ assert.deepEqual([pass.ok,pass.direction,pass.turnstile],[true,'in','Turnike 2']);
+ assert.equal((await call(app.base,'/api/turnstiles','GET',null,admin)).data.inside_count,1);
+ assert.equal((await call(app.base,'/api/turnstiles/scan','POST',{code:first.turnstiles[1].qr,idempotency_key:'render-demo-0002'},admin)).status,403);
+ await app.stop();app=await boot(env);t.after(app.stop);admin=await login('admin');
+ const second=(await call(app.base,'/api/turnstiles','GET',null,admin)).data;
+ assert.equal(second.inside_count,0,'presence reset with the ephemeral DB');
+ for(let i=0;i<3;i++)assert.notEqual(second.turnstiles[i].qr,first.turnstiles[i].qr,'printed codes stop working after a restart');
+ for(const k of ['DEMO_ADMIN_PASSWORD','DEMO_TEACHER_PASSWORD','DEMO_MEMBER_PASSWORD'])assert.ok(!app.logs().includes(env[k]));
+});
