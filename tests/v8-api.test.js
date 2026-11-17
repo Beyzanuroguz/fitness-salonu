@@ -16,7 +16,7 @@ test.before(async () => {
   fs.cpSync(path.join(repo, 'backend'), path.join(dir, 'backend'), { recursive: true });
   const port = 3900 + Math.floor(Math.random() * 500);
   base = `http://127.0.0.1:${port}`;
-  proc = spawn(process.execPath, ['server.js'], { cwd: dir, env: { ...process.env, PORT: String(port) }, stdio: 'ignore' });
+  proc = spawn(process.execPath, ['server.js'], { cwd: dir, env: { ...process.env, NODE_ENV: 'test', FITNESS_DB_PATH: path.join(dir, 'test.sqlite'), PORT: String(port) }, stdio: 'ignore' });
   for (let i = 0; i < 50; i++) { try { await fetch(base + '/api/me'); return; } catch { await new Promise(r => setTimeout(r, 100)); } }
   throw Error('server did not start');
 });

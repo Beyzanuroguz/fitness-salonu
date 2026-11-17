@@ -39,7 +39,7 @@ function pwHash(p,salt=randomBytes(16).toString('hex')){return salt+':'+scryptSy
 function pwVerify(p,stored){try{const [salt,hash]=stored.split(':');return timingSafeEqual(Buffer.from(hash,'hex'),scryptSync(p,salt,64))}catch{return false}}
 const digest=t=>createHash('sha256').update(t).digest('hex');
 const roles=['admin','teacher','member'];
-function authUser(req){const tok=(req.headers.cookie||'').split(';').map(x=>x.trim()).find(x=>x.startsWith('fc_session='))?.slice(11);if(!tok)return null;const u=db.prepare('SELECT u.id,u.username,u.role,u.member_id,u.trainer_id,s.expires_at FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id_hash=?').get(digest(tok));if(!u||u.expires_at<Date.now())return null;return u}
+function authUser(req){const tok=(req.headers.cookie||'').split(';').map(x=>x.trim()).find(x=>x.startsWith('fc_session='))?.slice(11);if(!tok)return null;const u=db.prepare('SELECT u.id,u.username,u.role,u.member_id,u.trainer_id,s.expires_at,s.id_hash session_hash FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id_hash=?').get(digest(tok));if(!u||u.expires_at<=Date.now())return null;return u}
 function setSession(res,userId){const token=randomBytes(32).toString('hex');db.prepare('DELETE FROM sessions WHERE expires_at<?').run(Date.now());db.prepare('INSERT INTO sessions(id_hash,user_id,expires_at) VALUES(?,?,?)').run(digest(token),userId,Date.now()+12*3600000);res.setHeader('Set-Cookie',`fc_session=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200${process.env.COOKIE_SECURE==='1'?'; Secure':''}`)}
 function getProfile(u){return u?{id:u.id,username:u.username,role:u.role,member_id:u.member_id,trainer_id:u.trainer_id}:null}
 function assertAllowed(u,condition){if(!condition){const e=Error('Bu işlem için yetkiniz yok');e.status=403;throw e}}
@@ -217,7 +217,7 @@ function api(method,pathname,body,u){
    db.exec('COMMIT');return {status};
   }catch(e){db.exec('ROLLBACK');throw e}
  }
- if(method==='POST'&&pathname==='/api/checkins'){required(body,'member_id');const m=db.prepare('SELECT * FROM members WHERE id=?').get(Number(body.member_id));if(!m||m.status!=='Aktif'||m.expires<datePlus(0))throw new Error('Aktif üyelik bulunamadı');db.prepare('INSERT INTO checkins(member_id) VALUES(?)').run(m.id);log('QR giriş',m.name);return {ok:true}}
+ if(method==='POST'&&pathname==='/api/checkins'){assertAllowed(u,admin);required(body,'member_id');const m=db.prepare('SELECT * FROM members WHERE id=?').get(Number(body.member_id));if(!m||m.status!=='Aktif'||m.expires<datePlus(0))throw new Error('Aktif üyelik bulunamadı');db.prepare('INSERT INTO checkins(member_id) VALUES(?)').run(m.id);log('QR giriş',m.name);return {ok:true}}
  if(method==='POST'&&pathname==='/api/payments'){required(body,'member_id','amount','due_date');const r=db.prepare('INSERT INTO payments(member_id,amount,status,due_date) VALUES(?,?,?,?)').run(Number(body.member_id),Number(body.amount),'Bekliyor',body.due_date);return {id:Number(r.lastInsertRowid)}}
  if(method==='POST'&&/^\/api\/payments\/\d+\/pay$/.test(pathname)){const id=Number(pathname.split('/')[3]);db.prepare("UPDATE payments SET status='Ödendi',paid_at=? WHERE id=?").run(datePlus(0),id);log('Ödeme alındı',String(id));return {ok:true}}
  if(method==='POST'&&pathname==='/api/measurements'){required(body,'member_id','measured_at');db.prepare('INSERT INTO measurements(member_id,measured_at,weight,body_fat,muscle) VALUES(?,?,?,?,?)').run(Number(body.member_id),body.measured_at,Number(body.weight||0),Number(body.body_fat||0),Number(body.muscle||0));return {ok:true}}
@@ -225,6 +225,7 @@ function api(method,pathname,body,u){
  throw new Error('Endpoint bulunamadı');
 }
 const nutrition = require('./backend/nutrition')(db);
+const v9 = require('./backend/v9')(db);
 const mime={'.html':'text/html; charset=utf-8','.js':'application/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.ico':'image/x-icon'};
 const server=http.createServer(async(req,res)=>{try{
  const url=new URL(req.url,'http://localhost');
@@ -236,6 +237,7 @@ const server=http.createServer(async(req,res)=>{try{
    try{body=JSON.parse(Buffer.concat(chunks).toString()||'{}')}catch{const e=Error('Geçersiz JSON');e.status=400;throw e}
   }
   const u=authUser(req);
+  if(url.pathname.startsWith('/api/v9/')) return send(res,200,await v9(req.method,url.pathname,req.method==='GET'?Object.fromEntries(url.searchParams):body,u));
   if(req.method==='POST'&&url.pathname==='/api/setup'){
    assertAllowed(u,db.prepare('SELECT COUNT(*) n FROM users').get().n===0);
    required(body,'username','password');if(String(body.password).length<10)throw Error('Şifre en az 10 karakter olmalı');
