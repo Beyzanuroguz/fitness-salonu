@@ -16,3 +16,12 @@ v3-temp/
 v4-temp/
 v5-temp/
 v6-temp/
+*.sqlite3
+*.sqlite3-*
+*.db3
+*.db3-*
+*.pem
+*.key
+*.p12
+*.log
+coverage/

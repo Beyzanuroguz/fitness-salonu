@@ -1,0 +1,1 @@
+if(new URLSearchParams(location.search).has('embedded'))document.documentElement.classList.add('embedded');else location.replace('/'+(location.pathname.includes('v8')?'#nutrition':location.hash==='#qr'?'#entry':location.hash));

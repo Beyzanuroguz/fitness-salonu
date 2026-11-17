@@ -1,0 +1,38 @@
+# Install in nginx http context. Replace domain and certificate paths before use.
+limit_req_zone $binary_remote_addr zone=formclub_login:10m rate=5r/m;
+server {
+    listen 80;
+    server_name fitness.example.com;
+    return 308 https://fitness.example.com$request_uri;
+}
+server {
+    listen 443 ssl;
+    server_name fitness.example.com;
+    ssl_certificate /etc/letsencrypt/live/fitness.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/fitness.example.com/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    client_max_body_size 1m;
+    client_body_timeout 15s;
+    # Do not log query strings, headers, bodies, usernames, QR codes or cookies.
+    access_log off;
+    error_log /var/log/nginx/formclub-error.log warn;
+    location = /api/login {
+        limit_req zone=formclub_login burst=5 nodelay;
+        limit_req_status 429;
+        proxy_pass http://127.0.0.1:3001;
+        proxy_set_header Host fitness.example.com;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_no_cache 1;
+        proxy_cache_bypass 1;
+    }
+    location / {
+        proxy_pass http://127.0.0.1:3001;
+        proxy_set_header Host fitness.example.com;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_no_cache 1;
+        proxy_cache_bypass 1;
+        proxy_read_timeout 20s;
+    }
+}

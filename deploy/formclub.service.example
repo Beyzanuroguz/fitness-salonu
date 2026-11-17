@@ -1,0 +1,24 @@
+[Unit]
+Description=FORM CLUB
+After=network.target
+[Service]
+Type=simple
+User=formclub
+Group=formclub
+WorkingDirectory=/opt/formclub/current
+EnvironmentFile=/etc/formclub/formclub.env
+ExecStart=/usr/bin/node server.js
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=20
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/formclub
+StandardOutput=journal
+StandardError=journal
+[Install]
+WantedBy=multi-user.target

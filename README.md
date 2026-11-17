@@ -840,3 +840,7 @@ Bildirimler uygulama açıkken sorgulanır; arka plan Web Push desteği yoktur.
 
 Doğrulama: `NODE_ENV=test FITNESS_DB_PATH=:memory: node --test test/*.test.js tests/*.test.js`.
 HTTP testleri geçici yerel port, V8 süreç testi geçici dizinde SQLite kullanır.
+
+
+Üretim güvenliği, yayın kapıları, SQLite yedek/geri dönüş ve rollback adımları:
+[PRODUCTION_READINESS.md](PRODUCTION_READINESS.md). Canlı ticari yayın onayı henüz verilmedi.
