@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b100d">
+<title>FORM CLUB · Bağlantı yok</title>
+<link rel="stylesheet" href="shell.css">
+<script src="runtime-config.js" onerror="window.FORMCLUB_SERVER_URL=''"></script>
+</head>
+<body>
+<main class="card" role="alert">
+  <div class="brand">FORM <b>CLUB</b></div>
+  <h1>Sunucuya ulaşılamıyor</h1>
+  <p>İnternet bağlantını kontrol et. QR girişi ve kişisel bilgiler sunucudan alınır, bu yüzden bağlantı gerekir.</p>
+  <button class="btn" id="retry" type="button">Tekrar dene</button>
+  <p class="muted" id="status" role="status"></p>
+</main>
+<script>
+document.getElementById('retry').onclick = function () {
+  var url = window.FORMCLUB_SERVER_URL;
+  if (!navigator.onLine) { document.getElementById('status').textContent = 'Hâlâ çevrimdışısın.'; return; }
+  if (url) location.replace(url + '/'); else location.reload();
+};
+window.addEventListener('online', function () { document.getElementById('retry').click(); });
+</script>
+</body>
+</html>

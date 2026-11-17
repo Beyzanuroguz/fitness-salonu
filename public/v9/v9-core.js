@@ -36,7 +36,10 @@ function scanErrorText(error) {
   if (!error) return 'Bilinmeyen hata';
   if (error.status === 409) return 'Bu QR daha önce kullanıldı. Üyeden yeni kodu göstermesini iste.';
   if (error.status === 401) return 'Oturumun kapanmış. Yeniden giriş yap.';
-  if (error.status === 403) return 'QR okutma yetkin yok.';
+  // 403 on verify means either a non-admin scanner or an inactive/expired membership.
+  if (error.status === 403) return /aktif üyelik/i.test(String(error.message || '')) ? 'Üyelik aktif değil veya süresi dolmuş. Giriş verilmedi.' : 'QR okutma yetkin yok.';
+  if (error.status === 422) return String(error.message || 'QR geçersiz') + '. Üyeden ekrandaki yeni kodu göstermesini iste.';
+  if (error.offline || error.status === 0) return 'Bağlantı yok, kod doğrulanamadı. Bağlantı gelince tekrar okut.';
   return String(error.message || 'QR doğrulanamadı');
 }
 

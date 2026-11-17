@@ -212,3 +212,29 @@ details summary{cursor:pointer;color:#b1c5b4;font-size:13px;font-weight:700;min-
   .mobile-only{display:none}
   .scanner{aspect-ratio:4/3}
 }
+
+/* ---------- Mobile QR and scanner states ---------- */
+.notice>svg{flex:none;width:22px;height:22px;margin-top:1px}
+.qr-state{margin-top:4px}
+.qr-help{margin:0;font-size:14px;line-height:1.45}
+.qr-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;width:100%}
+.qr-actions .btn{flex:1 1 140px}
+.qr-offline{margin:0;font-size:13px;color:var(--warn)}
+.qr-inline{width:100%;text-align:left;margin:0}
+.qr-overlay{flex-direction:column;gap:10px;align-content:center;font-size:15px}
+.qr-frame.stale .qr-overlay{background:rgba(255,255,255,.72)}
+.countdown b{font-size:18px;color:var(--ink)}
+.spinner{display:inline-block;width:28px;height:28px;border-radius:50%;border:3px solid rgba(28,43,18,.25);border-top-color:#1c2b12;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+/* "Büyüt": the code fills the screen width for scanners held further away. */
+.qr-card.big{max-width:none;border:0;background:transparent;padding:0}
+.qr-card.big .qr-frame{width:min(94vw,calc(100vh - 220px),560px);width:min(94vw,calc(100dvh - 220px),560px);min-width:220px;padding:18px}
+.qr-card.big .member-meta,.qr-card.big .qr-help{display:none}
+.scanner .placeholder>div{max-width:34ch;line-height:1.5;font-size:14px}
+.scanner .placeholder b{color:var(--ink)}
+.manual .btn{flex:none}
+@media (prefers-reduced-motion:reduce){.spinner{animation-duration:2.4s}}
+@media (max-width:420px){.qr-frame{width:min(86vw,300px);padding:10px}.member-meta{grid-template-columns:1fr 1fr;gap:8px}.member-meta div{padding:8px}}
+/* Embedded inside the main app: no V9 tab bar, so no reserved space for it. */
+.embedded .shell{padding-bottom:0}
+.embedded .toast{bottom:calc(16px + var(--safe-b))}

@@ -62,8 +62,9 @@ const S = {
   user: null, role: '', state: null, view: '',
   online: navigator.onLine !== false,
   notes: [], notesLoaded: false, notesError: '', notesMissing: false, noteFilter: 'all',
-  qr: { token: '', expiresAt: 0, ttl: 60, loading: false, error: '', missing: false },
-  scan: { active: false, busy: false, result: null, history: [], last: '', lastAt: 0, engine: '', error: '' },
+  qr: { token: '', expiresAt: 0, ttl: 60, loading: false, error: '', status: 0, missing: false },
+  qrBig: false,
+  scan: { active: false, busy: false, starting: false, permission: '', result: null, history: [], last: '', lastAt: 0, engine: '', error: '', errorHelp: '' },
   report: { year: new Date().getFullYear(), month: new Date().getMonth() + 1, trainerId: null, data: null, trend: [], loading: false, error: '', missing: false },
   install: { prompt: null, installed: false },
   sw: { waiting: null }
@@ -107,7 +108,7 @@ async function init() {
 }
 const trainers = () => Array.isArray(S.state?.trainers) ? S.state.trainers : [];
 function renderLoggedOut() {
-  root.innerHTML = `<main class="main"><div class="brand">FORM <strong>CLUB</strong><sup>V9</sup></div><section class="card" style="margin-top:24px"><h2>Giriş gerekli</h2><p class="muted">V9 ekranlarını kullanmak için önce FORM CLUB hesabınla giriş yap.</p><a class="btn primary block" href="/">Giriş yap</a></section></main>`;
+  root.innerHTML = `<main class="main"><div class="brand">FORM <strong>CLUB</strong><sup>V9</sup></div><section class="card" style="margin-top:24px"><h2>Giriş gerekli</h2><p class="muted">V9 ekranlarını kullanmak için önce FORM CLUB hesabınla giriş yap.</p><a class="btn primary block" href="/" target="_top">Giriş yap</a></section></main>`;
 }
 function renderFatal(message) {
   root.innerHTML = `<main class="main"><div class="brand">FORM <strong>CLUB</strong><sup>V9</sup></div><div class="notice bad" style="margin-top:24px" role="alert"><div class="grow"><b>V9 açılamadı</b><br>${esc(message)}</div></div><button class="btn" id="retry-boot">${icon('refresh')} Tekrar dene</button></main>`;
@@ -125,6 +126,7 @@ function go(view, replace = false) {
   if (location.hash !== hash) history[replace ? 'replaceState' : 'pushState'](null, '', hash);
   render();
   if (view === 'qr') startQR();
+  if (view === 'scan') checkCameraPermission();
   if (view === 'performance' && !S.report.data && !S.report.loading) loadReport();
   if (view === 'notifications') loadNotifications();
   window.scrollTo(0, 0);
@@ -192,17 +194,27 @@ let qrTimer = 0, tickTimer = 0, wakeLock = null;
 function qrView() {
   const q = S.qr;
   if (q.missing) return `<div class="notice info">${esc(missingApiText)}</div>`;
-  if (q.error && !q.token) return `<div class="notice bad" role="alert"><div class="grow">${esc(q.error)}</div></div><button class="btn" data-qr-refresh>${icon('refresh')} Tekrar dene</button>`;
+  if (!q.token && !S.online) return `<div class="notice warn qr-state" role="alert">${icon('alert')}<div class="grow"><b>Bağlantı yok</b><br>QR kodu sunucudan alınır. İnternet bağlantısı gelince kod otomatik hazırlanır.</div></div><button class="btn block" data-qr-refresh disabled>${icon('refresh')} Bağlantı bekleniyor…</button>`;
+  if (q.error && !q.token) {
+    const login = q.status === 401;
+    return `<div class="notice bad qr-state" role="alert">${icon('alert')}<div class="grow"><b>${login ? 'Oturum kapandı' : q.status === 403 ? 'QR kodu oluşturulamadı' : 'Kod alınamadı'}</b><br>${esc(login ? 'Güvenlik için yeniden giriş yapman gerekiyor.' : q.error)}</div></div>${login ? '<a class="btn primary block" href="/" target="_top">Giriş yap</a>' : `<button class="btn block" data-qr-refresh>${icon('refresh')} Tekrar dene</button>`}`;
+  }
   const me = (S.state?.members || [])[0];
-  return `<section class="card qr-card"><div class="qr-wrap">
-    <p class="muted" style="margin:0">Resepsiyondaki yöneticiye göster. Kod her ${q.ttl} saniyede yenilenir ve tek kullanımlıktır.</p>
-    <div class="qr-frame" id="qr-frame" role="img" aria-label="Giriş QR kodu"><div class="qr-overlay" id="qr-overlay">${q.loading && !q.token ? 'Kod hazırlanıyor…' : ''}</div></div>
-    <div class="countdown" id="qr-count" aria-live="off"></div>
-    <button class="btn" data-qr-refresh ${q.loading ? 'disabled' : ''}>${icon('refresh')} Yeni kod al</button>
+  return `<section class="card qr-card${S.qrBig ? ' big' : ''}" id="qr-card"><div class="qr-wrap">
+    <p class="muted qr-help">Resepsiyondaki yöneticiye göster. Kod her ${q.ttl} saniyede yenilenir ve tek kullanımlıktır.</p>
+    <div class="qr-frame" id="qr-frame" role="img" aria-label="Giriş QR kodu"><div class="qr-overlay" id="qr-overlay">${q.loading && !q.token ? '<span class="spinner" aria-hidden="true"></span><span>Kod hazırlanıyor…</span>' : ''}</div></div>
+    <div class="countdown" id="qr-count" aria-hidden="true"></div>
+    <p class="sr" id="qr-live" role="status" aria-live="polite"></p>
+    ${q.error && S.online ? `<div class="notice bad qr-inline" role="alert"><div class="grow">Yeni kod alınamadı: ${esc(q.error)}</div></div>` : ''}
+    ${S.online ? '' : '<p class="qr-offline" role="status"><span class="offline-dot"></span>Çevrimdışı · mevcut kod süresi bitene kadar geçerli, yenisi bağlantı gelince alınır.</p>'}
+    <div class="qr-actions"><button class="btn" data-qr-refresh ${q.loading || !S.online ? 'disabled' : ''}>${icon('refresh')} Yeni kod al</button><button class="btn ghost" id="qr-big" aria-pressed="${S.qrBig ? 'true' : 'false'}">${S.qrBig ? 'Küçült' : 'Büyüt'}</button></div>
     ${me ? `<div class="member-meta"><div><span>Üye</span><b>${esc(me.name)}</b></div><div><span>Üyelik bitişi</span><b>${esc(me.expires || '—')}</b></div><div><span>Paket</span><b>${esc(me.plan || '—')}</b></div><div><span>Ders kredisi</span><b>${esc(me.credits ?? '—')}</b></div></div>` : ''}
   </div></section>
-  <p class="footnote">Ekran parlaklığını artırmak okutmayı hızlandırır. Bu ekran açıkken telefonun ekranı kararmaz (destekleyen tarayıcılarda).</p>`;
+  <p class="footnote">Ekran parlaklığını artırmak okutmayı hızlandırır. Bu ekran açıkken telefonun ekranı kararmaz (destekleyen tarayıcılarda). Kodun ekran görüntüsü işe yaramaz: süresi dolunca geçersiz olur.</p>`;
 }
+// Announce code state changes once for screen readers; the visual countdown stays silent.
+let qrSpoken = '';
+function sayQR(text) { const el = $('qr-live'); if (el && text !== qrSpoken) { qrSpoken = text; el.textContent = text; } }
 function qrSvg(token) {
   const qr = window.qrcode(0, 'M');
   qr.addData(token, 'Byte');
@@ -228,24 +240,34 @@ function tickQR() {
   const stale = !S.qr.token || left === 0;
   frame.classList.toggle('stale', stale);
   const overlay = $('qr-overlay');
-  if (overlay && stale && S.qr.token) overlay.innerHTML = S.online ? `<button class="btn primary" data-qr-refresh>${icon('refresh')} Yeni kod al</button>` : '<span>Çevrimdışı · bağlantı gelince kod yenilenir</span>';
-  else if (overlay && !stale) overlay.innerHTML = '';
+  if (overlay && stale && S.qr.token) {
+    const html = S.qr.loading ? '<span class="spinner" aria-hidden="true"></span><span>Yeni kod alınıyor…</span>'
+      : S.online ? `<span>Kodun süresi doldu</span><button class="btn primary" data-qr-refresh>${icon('refresh')} Yeni kod al</button>`
+      : '<span>Kodun süresi doldu<br>Çevrimdışı · bağlantı gelince yenilenir</span>';
+    if (overlay.dataset.state !== html) { overlay.innerHTML = html; overlay.dataset.state = html; }
+  } else if (overlay && !stale && overlay.dataset.state) { overlay.innerHTML = ''; overlay.dataset.state = ''; }
+  if (stale && S.qr.token) sayQR(S.online ? 'Kodun süresi doldu. Yeni kod al düğmesine dokun.' : 'Kodun süresi doldu. Bağlantı yok.');
+  else if (left === 10) sayQR('Kodun 10 saniye geçerliliği kaldı.');
   const C = 2 * Math.PI * 16, frac = S.qr.ttl ? left / S.qr.ttl : 0;
-  el.innerHTML = `<svg class="ring ${left <= 10 ? 'low' : ''}" viewBox="0 0 38 38" aria-hidden="true"><circle class="track" cx="19" cy="19" r="16"/><circle class="arc" cx="19" cy="19" r="16" stroke-dasharray="${C.toFixed(2)}" stroke-dashoffset="${(C * (1 - frac)).toFixed(2)}"/></svg><span>${stale ? 'Kodun süresi doldu' : `Kod <b>${left}</b> sn geçerli`}</span>`;
+  el.innerHTML = `<svg class="ring ${left <= 10 ? 'low' : ''}" viewBox="0 0 38 38" aria-hidden="true"><circle class="track" cx="19" cy="19" r="16"/><circle class="arc" cx="19" cy="19" r="16" stroke-dasharray="${C.toFixed(2)}" stroke-dashoffset="${(C * (1 - frac)).toFixed(2)}"/></svg><span>${stale ? (S.qr.loading ? 'Yeni kod alınıyor…' : 'Kodun süresi doldu') : `Kod <b>${left}</b> sn geçerli`}</span>`;
 }
 async function fetchQR() {
   if (S.qr.loading) return;
   clearTimeout(qrTimer);
   S.qr.loading = true;
+  if (S.view === 'qr' && S.qr.token) tickQR();
   try {
     const r = K.normalizeQR(await api(K.ENDPOINTS.qr, { method: 'POST', body: {} }));
-    Object.assign(S.qr, { token: r.token, ttl: r.expiresIn, expiresAt: Date.now() + r.expiresIn * 1000, error: '', missing: false, loading: false });
-    if (S.view === 'qr') { if (!$('qr-frame')) render(); else paintQR(); }
+    Object.assign(S.qr, { token: r.token, ttl: r.expiresIn, expiresAt: Date.now() + r.expiresIn * 1000, error: '', status: 0, missing: false, loading: false });
+    if (S.view === 'qr') { if (!$('qr-frame') || !$('qr-card')) render(); else paintQR(); sayQR(`Yeni giriş kodu hazır. ${r.expiresIn} saniye geçerli.`); }
     qrTimer = setTimeout(() => { if (S.view === 'qr' && !document.hidden) fetchQR(); }, K.refreshDelayMs(r.expiresIn));
   } catch (e) {
     S.qr.loading = false;
     S.qr.missing = K.isMissingApi(e);
     S.qr.error = e.message;
+    S.qr.status = e.status || 0;
+    // A rejected session or membership invalidates the visible code too.
+    if (e.status === 401 || e.status === 403) S.qr.token = '';
     // Membership problems (403) are not retried automatically; network problems retry when back online.
     if (S.view === 'qr') { if (S.qr.token && e.offline) tickQR(); else render(); }
   }
@@ -273,10 +295,11 @@ function scanView() {
   return `<div class="grid two">
   <section class="card">
     <div class="scanner" id="scanner">
-      ${s.active ? `<video id="scan-video" playsinline muted autoplay></video><div class="reticle"></div>${s.busy ? '' : '<div class="scanline"></div>'}` : `<div class="placeholder">${icon('camera')}<div>${!secure ? 'Kamera yalnızca HTTPS veya localhost üzerinden açılabilir. Aşağıdan kodu elle veya USB okuyucuyla gir.' : !camSupported ? 'Bu tarayıcı kamera erişimini desteklemiyor. Aşağıdan kodu elle veya USB okuyucuyla gir.' : 'Üyenin telefonundaki QR kodu çerçeveye getir.'}</div>${secure && camSupported ? `<button class="btn primary" id="cam-start">${icon('camera')} Kamerayı aç</button>` : ''}</div>`}
+      ${s.active ? `<video id="scan-video" playsinline muted autoplay aria-label="Kamera görüntüsü"></video><div class="reticle" aria-hidden="true"></div>${s.busy ? '' : '<div class="scanline" aria-hidden="true"></div>'}` : `<div class="placeholder">${icon('camera')}${cameraHelp(secure, camSupported)}${secure && camSupported ? `<button class="btn primary" id="cam-start" ${s.starting ? 'disabled' : ''}>${icon('camera')} ${s.starting ? 'Kamera açılıyor…' : s.error ? 'Tekrar dene' : 'Kamerayı aç'}</button>` : ''}</div>`}
       ${resultHtml}
     </div>
-    ${s.error ? `<div class="notice bad" role="alert" style="margin-top:12px"><div class="grow">${esc(s.error)}</div></div>` : ''}
+    ${s.error ? `<div class="notice bad" role="alert" style="margin-top:12px"><div class="grow">${esc(s.error)}${s.errorHelp ? `<br><span class="muted">${esc(s.errorHelp)}</span>` : ''}</div></div>` : ''}
+    ${S.online ? '' : '<div class="notice warn" role="status" style="margin-top:12px"><div class="grow"><b>Bağlantı yok.</b> Kodlar sunucuda doğrulanır; bağlantı gelene kadar giriş onaylanamaz.</div></div>'}
     <div class="row" style="margin-top:12px;justify-content:space-between">${s.active ? `<button class="btn" id="cam-stop">Kamerayı kapat</button><span class="footnote">${s.engine === 'native' ? 'Yerel QR algılayıcı' : 'Yazılım QR çözücü'}</span>` : ''}</div>
     <form id="manual-form" style="margin-top:12px" autocomplete="off"><label class="field" for="manual-token">Kod ile doğrula (USB / Bluetooth okuyucu da kullanılabilir)</label><div class="manual" style="margin-top:6px"><input id="manual-token" name="token" inputmode="text" autocapitalize="off" spellcheck="false" placeholder="QR içeriği"><button class="btn primary" ${s.busy ? 'disabled' : ''}>Doğrula</button></div></form>
   </section>
@@ -285,15 +308,51 @@ function scanView() {
     <p class="footnote">Liste yalnızca bu cihazda, sayfa açıkken tutulur. Her QR 60 saniye geçerlidir ve bir kez kullanılabilir.</p>
   </section></div>`;
 }
-async function startCamera() {
-  S.scan.error = '';
+function cameraHelp(secure, supported) {
+  if (!secure) return `<div><b>Kamera için güvenli bağlantı (HTTPS) gerekli.</b><br>Telefon tarayıcıları kamerayı yalnızca https:// ile başlayan adreslerde açar${location.protocol === 'http:' ? ` (şu an: ${esc(location.host)} http üzerinden açık)` : ''}. Yöneticinden HTTPS adresini iste. Bu arada kodu aşağıya elle veya USB okuyucuyla girebilirsin.</div>`;
+  if (!supported) return '<div>Bu tarayıcı kamera erişimini desteklemiyor. Güncel Chrome veya Safari kullan ya da kodu aşağıya elle veya USB okuyucuyla gir.</div>';
+  if (S.scan.permission === 'denied') return `<div><b>Kamera izni kapalı.</b><br>${esc(permissionSteps())}</div>`;
+  return '<div>Üyenin telefonundaki QR kodu çerçeveye getir.</div>';
+}
+function permissionSteps() {
+  if (isIOS()) return 'iPhone: Ayarlar › Safari › Kamera › İzin Ver; ya da adres çubuğundaki “aA” › Web Sitesi Ayarları › Kamera. Ana ekrana eklenmiş uygulamada Ayarlar’dan izin verip uygulamayı yeniden aç.';
+  if (/android/i.test(navigator.userAgent)) return 'Android: adres çubuğundaki kilit simgesi › İzinler › Kamera › İzin ver. Ardından “Tekrar dene”ye dokun.';
+  return 'Adres çubuğundaki kilit veya kamera simgesinden bu site için kameraya izin ver, ardından “Tekrar dene”ye bas.';
+}
+// Map getUserMedia failures to actionable Turkish messages.
+function cameraError(e) {
+  const name = e?.name || '';
+  if (name === 'NotAllowedError' || name === 'PermissionDeniedError') return ['Kamera izni verilmedi.', permissionSteps()];
+  if (name === 'SecurityError') return ['Kamera bu sayfada engellendi.', 'Sayfayı HTTPS adresinden aç. Uygulama içinde açıksan ana sayfadan yeniden dene.'];
+  if (name === 'NotFoundError' || name === 'DevicesNotFoundError') return ['Bu cihazda kamera bulunamadı.', 'Kodu aşağıya elle veya USB okuyucuyla girebilirsin.'];
+  if (name === 'NotReadableError' || name === 'TrackStartError') return ['Kamera başka bir uygulama tarafından kullanılıyor.', 'Kamerayı kullanan uygulamayı kapatıp “Tekrar dene”ye dokun.'];
+  if (name === 'AbortError') return ['Kamera başlatılamadı.', 'Birkaç saniye sonra tekrar dene.'];
+  return ['Kamera açılamadı: ' + (e?.message || name || e), ''];
+}
+async function checkCameraPermission() {
   try {
-    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
+    const status = await navigator.permissions?.query({ name: 'camera' });
+    if (!status) return;
+    const apply = () => { const was = S.scan.permission; S.scan.permission = status.state; if (was !== status.state && S.view === 'scan' && !S.scan.active) updateScanUI(); };
+    apply();
+    status.onchange = apply;
+  } catch {} // Safari and Firefox may not expose the camera permission name.
+}
+async function startCamera() {
+  S.scan.error = ''; S.scan.errorHelp = ''; S.scan.starting = true; updateScanUI();
+  const ask = video => navigator.mediaDevices.getUserMedia({ video, audio: false });
+  try {
+    try { stream = await ask({ facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }); }
+    catch (e) { if (e?.name === 'OverconstrainedError' || e?.name === 'ConstraintNotSatisfiedError') stream = await ask(true); else throw e; }
   } catch (e) {
-    S.scan.error = e?.name === 'NotAllowedError' ? 'Kamera izni verilmedi. Tarayıcı ayarlarından kamera iznini aç.' : e?.name === 'NotFoundError' ? 'Bu cihazda kamera bulunamadı.' : 'Kamera açılamadı: ' + (e?.message || e);
-    return render();
+    [S.scan.error, S.scan.errorHelp] = cameraError(e);
+    if (e?.name === 'NotAllowedError') S.scan.permission = 'denied';
+    S.scan.starting = false;
+    return S.view === 'scan' ? render() : undefined;
   }
+  if (S.view !== 'scan') { stream.getTracks().forEach(t => t.stop()); stream = null; S.scan.starting = false; return; }
   await setupDetector();
+  S.scan.permission = 'granted'; S.scan.starting = false;
   S.scan.active = true;
   render();
 }
@@ -350,7 +409,9 @@ async function submitToken(raw) {
   // The camera sees the same code many times per second; ignore repeats for 4 s.
   if (token === S.scan.last && now - S.scan.lastAt < 4000) return;
   S.scan.last = token; S.scan.lastAt = now;
+  if (!token) return;
   if (!K.isToken(token)) return showResult({ ok: false, title: 'Tanınmayan kod', detail: 'Bu bir FORM CLUB giriş QR kodu değil.' });
+  if (!S.online) return showResult({ ok: false, title: 'Bağlantı yok', detail: K.scanErrorText({ status: 0, offline: true }) });
   S.scan.busy = true; updateScanUI();
   try {
     const r = await api(K.ENDPOINTS.checkin, { method: 'POST', body: { token } });
@@ -558,6 +619,7 @@ root.addEventListener('click', async ev => {
     case 'install-dismiss': store.set('install-dismissed', '1'); return render();
     case 'sw-update': S.sw.waiting?.postMessage({ type: 'SKIP_WAITING' }); return;
     case 'cam-start': t.disabled = true; return startCamera();
+    case 'qr-big': S.qrBig = !S.qrBig; render(); return $('qr-big')?.focus();
     case 'cam-stop': stopCamera(); return render();
     case 'notes-reload': return loadNotifications();
     case 'read-all': t.disabled = true; return markRead(S.notes.filter(n => !n.read).map(n => n.id));
@@ -577,6 +639,7 @@ root.addEventListener('submit', ev => {
   S.scan.last = ''; // manual entry is always intentional
   submitToken(value);
 });
+document.addEventListener('keydown', ev => { if (ev.key === 'Escape' && S.qrBig && S.view === 'qr') { S.qrBig = false; render(); } });
 window.addEventListener('popstate', () => { if (S.user) go(location.hash.slice(1), true); });
 document.addEventListener('visibilitychange', () => {
   if (!S.user) return;
