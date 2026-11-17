@@ -193,3 +193,17 @@ APK/IPA derlemesi, fiziksel kamera/PWA kabulü ve canlı HTTPS testi bu birleşi
 çalıştırılmadı. Ana yayın engelleri: gerçek TLS/proxy/cihaz kabulü, native kimlik ve
 mağaza mimarisi, MFA/hesap yaşam döngüsü, KVKK, ödeme doğrulaması, yeni salon
 onboarding ve şifreli offsite yedek/alarmlar. Bundled mod yayına hazır değildir.
+
+## Nutrition+ geliştirme dalı — d661406 arayüz entegrasyonu
+
+- PASS (yerel): `/nutrition/`, sahiplik sınırları, favoriler, öğünler, sunucu hedefleri,
+  tarif malzemeleri ve açık bazlı ml kayıtları. Eksikler null olarak korunur;
+  eski V8 endpointleri/adapter regresyonu devam eder. Ana ve mobil **121 test PASS**.
+- PASS (canlı kaynak): 17 Kasım 2026 12:30 UTC, OFF arama ve ürün detayı gerçek ağda
+  bellek içi SQLite ile doğrulandı; ayrıntılar `NUTRITION_PLUS.md`.
+- NOT TESTED: Browser host kullanılamadı; görsel/gerçek cihaz barkod testi yok.
+- FAIL / kapsam dışı: yeni ekranda ölçüm geçmişi, tarif düzenleme/silme, günlük
+  düzenleme/taşıma yok. Sıvı yoğunluğu ve bilinmeyen besinler tahmin edilmez.
+- Önceki ticari kapılar, bundled blokajı, KVKK/MFA/ödeme ve offsite operasyon
+  eksikleri aynen devam ediyor. Bu çalışma `feature/nutrition-plus` dalındadır;
+  integration/v9, main veya canlı sunucuya aktarılmadı. Gerçek SQLite açılmadı.

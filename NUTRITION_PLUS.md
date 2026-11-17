@@ -1,59 +1,115 @@
-# FORM CLUB Nutrition+ — V9.5
+# FORM CLUB Nutrition+ — birleşik API ve arayüz
 
-Nutrition+ ana uygulamanın Beslenme sekmesindedir. Koyu/neon yeşil ekran mobil önceliklidir. V8 ekranı, VKİ/enerji tahminleri, V6/V8 tabloları ve API sözleşmeleri korunur; Nutrition+ başlığından V8'e erişilir. Eski günlükler otomatik aktarılmaz. QR, üyelik, ödeme ve oturum kodu değiştirilmemiştir.
+Dal: `feature/nutrition-plus`. Backend koruma commit'i `ab5f06e`; arayüz kaynağı
+`feature/nutrition-ui` / `d661406`. Kaydedilmemiş backend ve ilk ekran çalışması
+korundu. Ana uygulamanın Beslenme menüsü `/nutrition/?embedded=1` ekranını açar;
+doğrudan kullanım adresi `/nutrition/`.
 
-## Veri ve mahremiyet
+## API ve veri sahipliği
 
-Yeni `np_foods` ve `np_logs` tabloları yalnızca uygulama başlatıldığında seçili veritabanında oluşturulur. Bu geliştirme sırasında gerçek veritabanıyla uygulama başlatılmamıştır. Her okuma/yazma oturumdaki `user.id` ile sınırlandırılır; başka kullanıcıların kayıtlarını yöneticiler de göremez. API yanıtları `no-store` kullanır. Günlükler, favoriler ve tarifler localStorage/IndexedDB/service worker önbelleğine yazılmaz. PWA yalnızca statik ekran dosyalarını önbelleğe alır. Çevrimdışıyken günlük okunamaz veya yazılamaz.
+Tüm uçlar `/api/nutrition-plus` altında mevcut cookie oturumu, CSRF ve no-store
+başlıklarıyla çalışır. Her kişisel işlem oturumdaki `user.id` ile sınırlıdır.
+Yönetici dahil başka hesaplar kullanıcının besinlerine, favorilerine, günlüklerine,
+tariflerine veya hedeflerine erişemez. Mevcut rol menüleri korunur; eğitmen başka
+üyenin beslenme dosyasını göremez. Eğitmen doğrudan Nutrition+ kullanırsa kendi
+hesabının koleksiyonuyla çalışır. V6/V8 tabloları ve endpointleri değiştirilmedi.
+Eski günlükler kendiliğinden yeni koleksiyona taşınmaz.
 
-Kaynak Open Food Facts'tır. Arama yalnızca form gönderildiğinde yapılır; beş sonuç gösterilir. Ürün detayları barkodla sunucudan alınır. Ürün seçerken istemcinin besin değerlerine güvenilmez. Yanıtlar beş dakika süreyle, en fazla 150 kayıt olarak bellekte saklanır; eşzamanlı aynı istekler birleştirilir. Nutrition+ süreç başına dakikada 8 arama ve 12 ürün isteği sınırlar. Birden fazla sunucu sürecinde ortak rate limiter gerekir. Mevcut V8 sağlayıcı istemcisi ayrı kalır.
+| Yöntem / yol | Gerçek destek |
+|---|---|
+| GET `/search?q=...` | Open Food Facts, 2–100 karakter, en fazla 5 sonuç |
+| GET `/barcode?code=...` | Ürün ve kaynak/baz bilgisi; koleksiyona yazmadan okur |
+| POST `/select` | `{code}`; sağlayıcıdan yeniden doğrulanan kullanıcıya özel anlık görüntü |
+| GET `/foods?filter=...` | `all`, `favorites`, `recent`, `recipes`; kullanıcıya özel |
+| POST `/foods` | `{name,basis:'g'/'ml',nutrients:{kcal,protein,carbs,fat}}`; elle girilmiş etiket olarak işaretlenir; eksikler null |
+| PATCH `/foods/:id/favorite` | `{favorite:true/false}`; kalıcı favoriler |
+| POST `/recipes` | `{name,ingredients:[{food_id,amount,unit}],yield_grams,portions}`; gram için eski `{food_id,grams}` de çalışır; malzemeler saklanır ve makrolar sunucuda hesaplanır |
+| POST `/logs` | `{food_id,amount,unit,meal,day}`; `g`/`ml`, `breakfast/lunch/dinner/snack`; eski gram girdisi veya bilinen porsiyon sayısı desteklenir |
+| DELETE `/logs/:id` | Yalnız kullanıcının kaydını siler |
+| GET `/history?date=YYYY-MM-DD&period=...` | `daily/weekly/monthly`; öğünler, amount/unit, bilinen toplamlar ve eksik alan sayıları |
+| GET/PATCH/DELETE `/goals` | Hesaba özel kalıcı kcal/protein/carbs/fat hedefleri; kullanıcı tarafından belirlenir, tıbbi öneri değildir |
 
-[Open Food Facts API belgeleri](https://openfoodfacts.github.io/openfoodfacts-server/api/) ve kaynak ürün bağlantıları esas alınmıştır. V8 ile uyumlu v2 ürün API'si kullanılır; v3 geçişi ileride değerlendirilebilir. `OFF_USER_AGENT` ile işletmeci iletişim bilgisini içeren uygulama tanımlayıcısı yapılandırılabilir. Kaynak atfı ODbL-1.0 / DbCL-1.0'dır; ürün resmi kullanılmaz.
+Yeni tablolar `np_foods`, `np_logs`, `np_goals`; eski np_logs tablolarına `unit`
+sütunu eklenir (eski kayıtlar g). Bu şema işlemleri yalnız seçili DB ile uygulama
+başladığında çalışır. Bu görevde gerçek `fitness.sqlite` açılmadı veya değiştirilmedi;
+testler :memory: ya da testlere ait geçici dizinlerde çalıştı.
 
-Eksik enerji/makrolar `null` olarak saklanır; sıfır kabul edilmez. Geçersiz veya hacim bazlı etiket değerlerinden gram hesabı yapılmaz. Eksik makro içeren ürünlerin bilinen alanları kaydedilebilir; toplamlar `known` ve `missing` alanlarıyla döner, ekran yıldızla eksik toplamı belirtir. Tariflerde tek bir malzemede bile eksik makro varsa tarifin ilgili makrosu bilinmiyor kalır. Etiket verisinden farklı tahmin alanları kullanılmaz.
+## Besin doğruluğu ve birimler
 
-Porsiyon gramı yalnızca kaynak açıkça gram cinsinden bildiriyorsa kullanılır. Diğer ürünlerde kullanıcı doğrudan gram girer. Tarifler malzeme gramları ve kullanıcının bildirdiği hazır tarif ağırlığı üzerinden hesaplanır; porsiyon ağırlığı hazır ağırlık / porsiyon sayısıdır. Kayıtlı ürünler ve tarifler değişmez anlık görüntülerdir. Kaynak zamanı ile alım zamanı gösterilir; bilinmeyen kaynak zamanı açıkça belirtilir. Günlük hesapları yuvarlama öncesi değerlerle toplanır. Grafiklerde kcal/protein/karbonhidrat/yağ seçilebilir; hafta pazartesi başlar, ay gerçek takvime göre hesaplanır.
+Kaynak Open Food Facts'tır; API anahtarı veya FatSecret entegrasyonu yoktur. Ürün
+seçimi istemciden gelen makrolara güvenmez. Manuel ürünler açıkça elle girilmiş,
+tarifler malzemelerden hesaplanmış olarak gösterilir. Önizleme yalnız localhost'ta
+`?preview=mock` ile isteyerek açılır ve kalıcı örnek-veri uyarısı taşır; sağlayıcı
+hatasında örnek ürünlere geçilmez. Native/deployed host üzerinde mock modu açılmaz.
 
-FatSecret istemcisi eklenmedi ve hiçbir anahtar kullanılmadı. Gelecekte yalnızca geçerli erişim bilgisi ve uygun lisans doğrulandığında eklenmelidir.
+- Eksik enerji/makrolar null kalır, sıfır uydurulmaz. UI bilinmeyenleri belirtir;
+  günlük ve grafik toplamları bilinen katkıların toplamıdır, tam tüketim değildir.
+  Şeker/lif/tuz bu backend sürümünde kaynak sözleşmesine alınmadı; UI bunları
+  bilinmiyor olarak gösterir. Bunların hedefleri desteklenmez.
+- OFF `_100g` alanları kaynak şemasında 100 g veya 100 ml anlamına gelebilir.
+  Açık `100ml` bilgisi ya da 100g/100ml etiketiyle beraber kaynak hacim birimi varsa
+  hacim bazı seçilir. Belirsiz/çelişkili baz günlüğe alınmaz. Gram↔ml yoğunluğu
+  varsayılmaz. Kaynak porsiyon birimi bazla eşleşiyorsa kullanılır; cl/l→ml yalnız
+  aynı fiziksel boyutta dönüşümdür. Bilinmeyen porsiyon miktarı tahmin edilmez.
+- Sıvı malzemeli tarif için ölçülmüş hazır tarif ağırlığı g cinsinden zorunludur;
+  sıvı hacimlerinin toplamı gram sayılmaz. Backend malzemelerin miktar/birim ve
+  kaynak anlık görüntülerini saklar. Makrolar malzeme kayıtlarından hesaplanır;
+  eksik bir malzeme makrosu tarifte de bilinmiyor kalır.
+- Arama cache'i yalnız halka açık sağlayıcı yanıtları için 5 dakika / 150 kayıtlık
+  süreç belleğindedir. Eşzamanlı aynı istekler birleşir; süreç başına dakikada
+  8 arama ve 12 ürün isteği sınırı vardır. Çoklu süreçte ortak limiter gerekir.
+- Günlük, hedef ve kişisel koleksiyonlar browser storage'a yazılmaz. Preview/fallback
+  durum yalnız bellektedir. PWA sadece statik Nutrition+ dosyalarını cache'ler;
+  API istekleri bypass edilir. Çevrimdışıyken kişisel veri okunamaz/yazılamaz.
 
-## API
+Kaynak belgeleri:
+[OFF alan tanımları](https://github.com/openfoodfacts/openfoodfacts-server/blob/main/html/data-fields.txt),
+[beslenme veri modeli](https://openfoodfacts.github.io/documentation/docs/Product-Opener/dev/explain-nutrition-data/).
+ODbL-1.0 / DbCL-1.0 atfı ve ürün kaynak bağlantıları korunur. Topluluk etiket verisi
+laboratuvar doğrulaması değildir.
 
-Tüm uçlar `/api/nutrition-plus` altında, mevcut cookie oturumu ve CSRF denetimiyle çalışır.
+## Test kanıtları — 17 Kasım 2026
 
-| Yöntem / yol | Girdi / davranış |
-| --- | --- |
-| GET `/search?q=...` | 2–100 karakter; kaynak ürün adları ve barkodları |
-| GET `/barcode?code=...` | 8–14 rakam; besinler, gram bazının uygunluğu, porsiyon, kaynak ve zamanlar |
-| POST `/select` | `{code}`; kaynaktan ürün anlık görüntüsü kaydeder |
-| GET `/foods?filter=...` | `all`, `favorites`, `recent`, `recipes`; yalnızca kendi koleksiyonu |
-| PATCH `/foods/:id/favorite` | `{favorite:true/false}` |
-| POST `/recipes` | `{name,ingredients:[{food_id,grams}],yield_grams,portions}` |
-| POST `/logs` | `{food_id,grams,meal,day}` veya gram yerine `portions`; öğün `breakfast/lunch/dinner/snack` |
-| DELETE `/logs/:id` | Kendi günlük kaydını siler |
-| GET `/history?date=YYYY-MM-DD&period=...` | `daily/weekly/monthly`; günlük seri, öğün kayıtları, bilinen toplam ve eksik sayıları |
+```sh
+NODE_ENV=test FITNESS_DB_PATH=:memory: node --test test/*.test.js tests/*.test.js mobile/test/*.test.js
+git diff --check
+```
 
-## Doğrulama — 17 Kasım 2026
+**121/121 PASS**, 0 başarısız/atlanan. Eski V8 adapter'ı açık `contract:'v8'`
+seçimiyle regresyon testinde korunur; yeni ekranın varsayılan adapter'ı Nutrition+.
+Yeni sözleşme testleri: ürün seçimi/lookup, kaynak makrolarına güven, gram/ml,
+favoriler, öğünler, tarif malzemeleri ve null yayılımı, hedef kalıcılığı/silme,
+üye/eğitmen/yönetici arasında sahiplik izolasyonu. HTTP testi oturum/CSRF/cache,
+hedefler, manuel ml kayıtları ve `/nutrition/` dosyalarını doğrular. Mevcut QR,
+PWA, güvenlik, staging, mobil ve V8 testleri de geçti.
 
-`NODE_ENV=test FITNESS_DB_PATH=:memory: node --test test/*.test.js tests/*.test.js mobile/test/*.test.js`
+Canlı OFF kontrolü bu görevde **2026-11-17 12:30:26 UTC**'de, bellek içi SQLite ile
+çalıştı: `nutella` araması 5 sonuç; seçilen `0009800800049` —
+`Hazelnut Spread + Breadsticks`; kaynak 100 g bazında 500 kcal, protein
+7.69230769230769 g, karbonhidrat 65.3846153846154 g, yağ 25 g döndürdü.
+Kaynak güncelleme zamanı `2026-11-14T16:15:34.000Z`. Bu değerler canlı kontrol
+kaydıdır; kodda örnek veya varsayılan besin değeri olarak kullanılmaz.
 
-Sonuç: **96 test geçti, 0 başarısız, 0 atlanan**. HTTP testlerinin geçici portları sandbox dışında çalıştırıldı. Veritabanları bellek içi veya testlere ait geçici dizinlerdedir. Kapsam: mevcut V8, QR, güvenlik, oturum/CSRF, ödeme/rapor sözleşmeleri, PWA ve mobil regresyonları; Nutrition+ sahiplik sınırları, porsiyon/öğünler, artık yıl/hafta geçişi, eksik makro, tarif, favori/son tüketilen, kaynak arızası, istemci verisine güvenmeme, HTTP erişimi ve temel VM ekran etkileşimleri.
+## Tarayıcı test adresi ve kalan eksikler
 
-Gerçek Open Food Facts servisiyle 2026-11-17 12:10 UTC'de, bellek içi SQLite kullanan Nutrition+ modülü üzerinden doğrulandı:
+Bu görevde açılan geçici sunucu: `http://127.0.0.1:52110/nutrition/`.
+İlk olarak `http://127.0.0.1:52110/` üzerinden yalnız test yöneticisi hesabı
+oluşturup Beslenme menüsüne gidilebilir. Veritabanı tamamen bellektedir; sunucu
+kapanınca test hesapları ve kayıtlar kaybolur. Gerçek salon sunucusu kullanılmadı.
 
-- `nutella` araması: 5 gerçek sonuç.
-- Barkod `3017620422003`: Nutella; 100 g için 539 kcal, protein 6,3 g, karbonhidrat 57,5 g, yağ 30,9 g.
-- Gerçek ürünün seçilip kaydedilmesi ve 30 g ara öğün hesabı: 161,7 kcal / 1,89 g protein / 17,25 g karbonhidrat / 9,27 g yağ.
-- Kaynak güncellemesi `2026-11-17T08:07:47.000Z`; kaynak porsiyon gramı yok, tahmin edilmedi.
+- Browser erişim host'u kullanılamadığı için görsel/gerçek tarayıcı kontrolü
+  NOT TESTED. HTTP/VM testleri görsel doğrulamanın yerine geçmez.
+- Fiziksel kamera ve iOS/Android barkod testleri yapılmadı. BarcodeDetector yoksa
+  veya izin reddedilirse elle barkod kullanılır; native/evirensel decoder yok.
+- Vücut ölçümü geçmişi yeni UI'da desteklenmiyor; açık eksik özellik durumu var.
+  Kalori/VKİ tahmini mevcut V8 hesap API'sine bağlıdır ve tahmin olarak etiketlenir.
+- Tarif düzenleme/silme, geçmiş günlük düzenleme ve eski V8 günlüklerini taşıma yok.
+- Ürün bazının/porsiyonunun bilinmediği durumda kayıt engellenir. Sıvı↔kütle
+  dönüşümü için kullanıcı verisi uydurulmaz.
+- Mağaza/gerçek cihaz yayını yapılmadı. Remote mod aynı HTTPS kökeninde kalır;
+  bundled mod farklı kökenden Strict cookie/CORS nedeniyle hâlâ yayına bloke.
+- Mevcut ticari yayın kapıları (KVKK, MFA/hesap yaşam döngüsü, ödeme doğrulaması,
+  gerçek HTTPS/proxy, offsite yedek/alarmlar) kapanmadı.
 
-Gerçek `fitness.sqlite` SHA-1 başlangıç ve son kontrolde aynı: `27bca8ca772162f333ca2bc3078959926acab7af`. WAL/SHM dosyalarının özeti değişti; `lsof` bunları ayrı Node PID 12167'nin açık tuttuğunu gösterdi. Geliştirme/test süreçleri gerçek SQLite dosyasını açmadı; aktif kullanıcı sürecine müdahale edilmedi.
-
-## Kalan doğrulamalar ve sınırlar
-
-- Tarayıcı kontrol sunucusu kullanılamadığından görsel mobil/masaüstü kontrolü tamamlanamadı. VM etkileşim testi görsel kontrolün yerine geçmez.
-- Kamera yalnızca `BarcodeDetector` ve kamera API'si bulunan cihazlarda çalışır; destek/izin yoksa elle barkod girilir. Fiziksel cihaz, iOS/Android kamera ve izin akışları doğrulanmadı. Evrensel barkod decoder / native tarama eklentisi eklenmedi.
-- FatSecret entegrasyonu yoktur. Canlı sağlayıcı kesintisi, eksik ürün ve kaynak doğruluğu sınırlamaları devam eder.
-- Eksik makrolar, bilinmeyen porsiyon gramları ve sıvıların yoğunluğu tahmin edilmez. Eksik verili toplamlar tam tüketimi temsil etmez.
-- Günlük kaydı silinebilir; tarif düzenleme/silme ve geçmiş günlük kaydı düzenleme bu sürümde bulunmaz. Yeni tarif oluşturulabilir, günlük kaydı silinip yeniden eklenebilir.
-- Yerel mobil paketleme/mevcut testler geçmiştir; mağaza derlemesi veya fiziksel cihaz yayını yapılmadı.
-
-Yalnızca `feature/nutrition-plus` dalında commit hedeflenmiştir. `integration/v9` veya `main` üzerinde merge/push yapılmaz.
+Yalnız `feature/nutrition-plus` üzerinde commit; integration/v9 veya main'e merge,
+GitHub push veya canlı dağıtım yok.

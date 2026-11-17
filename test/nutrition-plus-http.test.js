@@ -14,5 +14,9 @@ test('Nutrition+ HTTP session, CSRF, private cache, static shell and owner bound
  assert.equal((await request('/api/nutrition-plus/foods?user_id=999','GET',null,cookie)).status,403);
  assert.equal((await request('/api/nutrition-plus/logs','POST',{food_id:id,grams:100,meal:'lunch',day:'2026-11-17'},cookie,'https://evil.test')).status,403);
  for(const p of ['/nutrition-plus.html?embedded=1','/nutrition-plus.js','/nutrition-plus.css','/v8.html?embedded=1']){const r=await request(p);assert.equal(r.status,200);assert.match(r.headers.get('content-security-policy'),/script-src 'self'/);}
+ const goal=await request('/api/nutrition-plus/goals','PATCH',{kcal:1900,protein:100,carbs:200,fat:70},cookie);assert.equal(goal.status,200);assert.equal((await (await request('/api/nutrition-plus/goals','GET',null,cookie)).json()).goals.kcal,1900);
+ const liquid=await request('/api/nutrition-plus/foods','POST',{name:'Manual synthetic liquid',basis:'ml',nutrients:{kcal:40,protein:2,carbs:null,fat:1}},cookie);assert.equal(liquid.status,200);const lp=await liquid.json();assert.equal(lp.source,'manual');
+ assert.equal((await request('/api/nutrition-plus/logs','POST',{food_id:lp.id,amount:200,unit:'ml',meal:'snack',day:'2026-11-17'},cookie)).status,200);
+ for(const p of ['/nutrition/','/nutrition/index.html','/nutrition/nutrition-api.js','/nutrition/nutrition-core.js','/nutrition/nutrition-views.js','/nutrition/nutrition.js','/nutrition/nutrition.css']){const r=await request(p);assert.equal(r.status,200,p);assert.match(r.headers.get('content-security-policy'),/script-src 'self'/);}
  await request('/api/logout','POST',{},cookie);assert.equal((await request('/api/nutrition-plus/foods','GET',null,cookie)).status,401);
 });

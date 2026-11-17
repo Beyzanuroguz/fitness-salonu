@@ -32,7 +32,7 @@ test('single role menus expose required modules without leaking scanner or membe
  for(const p of ['today','calendar','students','attendance','performance','notifications'])assert.ok(pages('teacher').includes(p),p);
  assert.ok(!pages('teacher').includes('scan'));assert.ok(!pages('member').includes('scan'));assert.ok(pages('member').includes('entry'));
  vm.runInContext("role='member';page='entry'",c);assert.match(vm.runInContext('content()',c),/embedded=1#qr/);
- vm.runInContext("page='nutrition'",c);assert.match(vm.runInContext('content()',c),/nutrition-plus.html\?embedded=1/);
+ vm.runInContext("page='nutrition'",c);assert.match(vm.runInContext('content()',c),/nutrition\/\?embedded=1/);
 });
 test('unified worker bypasses APIs, token query strings and unknown files',()=>{
  const handlers={},c={URL,self:{location:{origin:'https://club.test'},addEventListener:(k,f)=>handlers[k]=f}};

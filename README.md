@@ -851,3 +851,8 @@ V9.5 bağımsız sentetik staging kurulumu ve mobil HTTPS yapılandırması:
 ## Nutrition+ (V9.5 devamı)
 
 Ana uygulamanın Beslenme sekmesi artık kişisel Nutrition+ ekranını açar. Mevcut V8 ekranına bu ekrandaki bağlantıyla erişilir. Open Food Facts arama/barkod, gram-porsiyon, öğün günlüğü, dönem grafikleri, favori/son tüketilen ve tarifler için API sözleşmeleri, 96 testin sonucu, gerçek API doğrulaması ve kalan sınırlar: [NUTRITION_PLUS.md](NUTRITION_PLUS.md).
+
+Nutrition+ birleşik ekranı `/nutrition/` adresindedir; ana uygulamanın Beslenme
+menüsü aynı ekranı açar. Varsayılan adapter `/api/nutrition-plus` kullanır; eski
+V8 endpointleri korunur. Güncel sözleşme, canlı kaynak kanıtı ve açık eksikler:
+[NUTRITION_PLUS.md](NUTRITION_PLUS.md).
