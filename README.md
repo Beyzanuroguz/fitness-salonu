@@ -781,3 +781,44 @@ filtre değişikliklerini ve ortak V7 entegrasyonunu kontrol eder. V8 beslenme
 backend testleri de aynı komutta korunmuştur. Chrome görsel testi bu çalışma
 kapsamında kullanıcı isteğiyle atlanmıştır. Testler yalnızca bellek veritabanı
 kullanır; localhost:3000 sunucusu ve gerçek SQLite dosyaları kullanılmaz.
+
+## V9 backend: QR giriş, hatırlatmalar ve eğitmen raporları
+
+Yeni API'ler mevcut `fc_session` oturumunu, HttpOnly/SameSite cookie ayarlarını,
+aynı kaynak kontrolünü ve JSON boyut sınırını kullanır. Üretimde HTTPS ile
+`COOKIE_SECURE=1` kullanın. Yeni tablolar eklenir; mevcut kayıtlar taşınmaz.
+Testler gerçek `fitness.sqlite` dosyasını açmaz.
+
+| Uç nokta | Yetki ve davranış |
+| --- | --- |
+| `POST /api/v9/qr` gövde `{}` | Aktif üyeliği olan üye kendi QR içeriğini alır: `{token, expires_at, expires_in:60}`. `expires_at` Unix milisaniyedir. İstemci token'ı QR olarak gösterir; bu uç nokta resim üretmez. Yeni kod önceki kodu iptal eder. |
+| `POST /api/v9/qr/verify` gövde `{ "token": "..." }` | Yalnızca yönetici tarar. Üyenin rolü, üyelik durumu, bitiş tarihi ve kodun üretildiği oturum yeniden denetlenir. Başarılı yanıtta `checkin_id`, `member_id`, `ok` döner. |
+| `GET /api/v9/reminders` | Yalnızca üyenin kendi uygulama içi hatırlatmaları: gelecek 24 saatteki rezervasyonlu dersler, 7 gün içinde bitecek veya bitmiş üyelik ve 7 gün içinde vadesi gelecek veya gecikmiş bekleyen ödemeler. |
+| `POST /api/v9/reminders/read` gövde `{ "id": "..." }` | Kendi güncel hatırlatmasını okundu işaretler; tekrar çağrı güvenlidir. |
+| `GET /api/v9/teacher/reports/monthly?month=2028-02` | Yalnızca oturumdaki eğitmenin dersleri. Ay verilmezse İstanbul'daki güncel ay kullanılır. Başka eğitmen kimliğiyle kapsam genişletilemez. |
+
+QR içeriği 32 rastgele bayttan oluşan hex token'dır. Veritabanında yalnızca SHA-256
+özeti tutulur. Süre dolumu `now >= expires_at` sınırında uygulanır; tüketim ve
+check-in aynı SQLite `BEGIN IMMEDIATE` işlemi içinde yapılır. Tekrar kullanım giriş
+oluşturmaz. Oturum silinince ona bağlı QR de silinir. QR kodu oturum açma yerine
+geçmez. Eski `POST /api/checkins` artık yalnızca yöneticiler içindir; üyeler bu
+uç noktadan QR doğrulamasını atlayamaz. QR salon girişidir, ders yoklaması veya
+ders hakkı tüketimi yapmaz.
+
+Hatırlatmalar istek sırasında mevcut kayıtlardan hesaplanır; iptal edilen dersler,
+ödenen borçlar ve yenilenen üyelikler sonraki okumada güncellenir. Okunma bilgisi
+kullanıcıya özel saklanır. Harici bildirim, e-posta veya zamanlanmış görev yoktur.
+Tarihler ve offsetsiz ders saatleri `Europe/Istanbul` esasına göre değerlendirilir.
+
+Aylık rapor `class_count`, `capacity`, `booked`, `attended`, `marked`,
+`attendance_percent`, `occupancy_percent` ve ders bazında `classes` döndürür.
+Doluluk `reserved + attended` / toplam kapasite; katılım `attended` /
+`attended + absent` olarak hesaplanır. İptal ve bekleme listesi sayılmaz.
+Ders sayısı planlanmış tüm dersleri içerir; payda sıfırsa yüzde `null` döner.
+Boş ayda sayılar sıfırdır. Ay filtresi ders başlangıç tarihine uygulanır.
+
+Hatalar: oturumsuz `401`, yetkisiz/aktif olmayan üyelik `403`, geçersiz girdi
+`400`, bulunmayan hatırlatma `404`, süresi geçmiş/kullanılmış/geçersiz QR `422`.
+QR ve oturum token'larını URL, günlük veya analitik sistemlerine yazmayın.
+
+Doğrulama: `node --test test/*.test.js tests/*.test.js`.
