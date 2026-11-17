@@ -7,7 +7,7 @@ test('legacy entry points retain assets and expose only FORM CLUB feature names'
   const text=html.replace(/<[^>]*>/g,' ');assert.doesNotMatch(text,/\bV[789]\b/,file);
   assert.doesNotMatch(html,/onload=|onclick=|<script>/,file);
  }
- for(const file of ['v7.js','v8.js','v9/v9.js']){
+ for(const file of ['v7.js','v8.js','v9/v9.js','nutrition/nutrition-views.js']){
   const js=fs.readFileSync(path.join(pub,file),'utf8');assert.doesNotMatch(js,/(?:>|['"])V[789](?:\s|<)/,file);
  }
  assert.equal(JSON.parse(fs.readFileSync(path.join(pub,'v9/manifest.webmanifest'))).name,'FORM CLUB');

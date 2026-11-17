@@ -122,8 +122,13 @@ async function runSearch(q) {
 
 /* ---------- Sheet ---------- */
 let opener = '';
-function openProduct(p) {
+async function openProduct(p) {
   if (!p) return;
+  if(p.detailsLoaded===false){
+    try{p=reg(await API.barcode(p.sourceId));}
+    catch(e){guard(e);toast(Core.errorText(e));return;}
+    if(S.session!=='ok')return;
+  }
   opener = focusSelector(document.activeElement);
   const fav = S.search.lists.favorites.items.some(f => f.id && f.id === p.id);
   S.sheet = { kind: 'product', product: p, amount: String(p.servings[0]?.amount || 100), meal: S.pendingMeal || Core.guessMeal(), saving: false, error: null, favorite: fav };

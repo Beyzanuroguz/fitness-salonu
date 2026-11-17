@@ -78,7 +78,7 @@ function shell(S, body) {
       <header class="topbar"><div class="brand">FORM <strong>CLUB</strong> <span class="plus">Nutrition+</span></div>${S.user ? `<span class="who">${esc(S.user.name)}</span>` : ''}</header>
       ${S.preview ? '<p class="banner banner-preview" role="note"><strong>ÖNİZLEME</strong> Örnek veri gösteriliyor. Bu kayıtlar gerçek değildir ve sunucuya gönderilmez.</p>' : ''}
       ${S.online ? '' : `<p class="banner banner-offline" role="status">${icon('wifi')} Çevrimdışısın. Kişisel veriler cihazda saklanmadığı için bağlantı gelince yenilenir.</p>`}
-      <main id="main" class="main" tabindex="-1">${body}</main>
+      <main id="main" class="main" tabindex="-1">${body}<p class="muted small"><a href="/v8.html?embedded=1">Beslenme günlüğü ve VKİ ekranını aç</a></p></main>
     </div>
   </div>
   ${S.sheet ? sheet(S) : ''}
@@ -231,6 +231,9 @@ function sheet(S) {
       ${S.caps.favorites && (p.id||p.sourceId) ? `<button class="iconbtn ${X.favorite ? 'on' : ''}" type="button" data-act="toggle-fav" aria-pressed="${X.favorite ? 'true' : 'false'}" aria-label="Favorilere ${X.favorite ? 'eklendi' : 'ekle'}">${icon('star')}</button>` : ''}
       <button class="iconbtn" type="button" data-act="close-sheet" aria-label="Kapat">${icon('close')}</button></div>
     <div class="src-box">${sourceBadge(p.source)}<span class="muted small">${esc(p.source.detail)}</span>${p.source.url ? ` <a class="small" href="${esc(p.source.url)}" target="_blank" rel="noopener noreferrer">Kaynakta gör</a>` : ''}${p.barcode ? `<span class="tag mono">${esc(p.barcode)}</span>` : ''}</div>
+    <p class="muted small">Alındı: ${esc(p.retrievedAt||'Bilinmiyor')} · Kaynak güncellemesi: ${esc(p.updatedAt||'Bilinmiyor')}</p>
+    ${p.supported===false?'<p class="note warn">Ürünün gram/ml bazı doğrulanamadı. Öğüne veya tarife eklenemez.</p>':''}
+    ${p.ingredients?.length?`<details><summary>Tarif malzemeleri ve kaynakları</summary>${p.ingredients.map(i=>`<p class="small">${esc(i.name)} · ${esc(fmt(i.amount,i.unit))} · ${sourceBadge(i.source)} ${i.source.url?`<a href="${esc(i.source.url)}" target="_blank" rel="noopener noreferrer">Kaynak</a>`:''} · ${esc(i.retrievedAt||'Bilinmiyor')}</p>`).join('')}</details>`:''}
     ${missing.length ? `<p class="note warn">Bilinmeyen değer: ${esc(missing.map(k => Core.NUTRIENTS.find(n => n.key === k).label).join(', '))}. Bu değerler toplamlara eklenmez.</p>` : ''}
     <form class="form" data-form="log">
       <div class="amount-row">
@@ -245,7 +248,7 @@ function sheet(S) {
       ${p.basis === 'ml' && !S.caps.volume ? '<p class="note">Sunucu şu an yalnızca gram bazlı kayıt alıyor.</p>' : ''}
       <div class="row sticky-actions">
         <button class="btn primary grow" type="submit" ${!canLog || amount === null || X.saving ? 'disabled' : ''}>${X.saving ? 'Ekleniyor…' : 'Öğüne ekle'}</button>
-        ${S.recipe.active ? `<button class="btn" type="button" data-act="recipe-add" ${amount === null ? 'disabled' : ''}>Tarife ekle</button>` : ''}
+        ${S.recipe.active ? `<button class="btn" type="button" data-act="recipe-add" ${amount === null || p.supported===false ? 'disabled' : ''}>Tarife ekle</button>` : ''}
       </div>
     </form>
   </div>`;

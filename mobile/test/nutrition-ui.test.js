@@ -427,3 +427,18 @@ test('controller boots in preview mode, routes and handles session expiry', asyn
   assert.match(expired.root.innerHTML, /Oturum süren doldu/);
   assert.doesNotMatch(expired.root.innerHTML, /ÖNİZLEME/, 'preview is refused on a deployed host');
 });
+
+test('opening a search hit resolves its actual unit before the amount form and displays source dates',async()=>{
+ const vm=require('node:vm'),listeners={};
+ const root={innerHTML:'',contains:x=>!!x,querySelector:()=>null,querySelectorAll:()=>[],addEventListener:(k,f)=>listeners[k]=f};
+ const stub=C.normalizeProduct({name:'Search liquid',source_id:'3017620422003',source:'Open Food Facts',details_loaded:false});
+ const full=C.normalizeProduct({name:'Search liquid',source_id:'3017620422003',source:'Open Food Facts',basis:'ml',per_100:{kcal:40},retrieved_at:'2026-11-17T12:00:00Z',updated_at:'2026-11-16T10:00:00Z'});
+ let reads=0,writes=0;
+ const api={preview:false,caps:{...A.PLUS_CAPS,favorites:false},me:async()=>({id:1,role:'member'}),goals:async()=>null,search:async()=>({products:[stub]}),barcode:async()=>{reads++;return full;},addLog:async()=>{writes++;}};
+ const context={NutritionCore:C,NutritionViews:V,NutritionApi:{resolveMode:()=> 'live',createNutritionApi:()=>api},FORMCLUB_CONFIG:{},document:{documentElement:{classList:{add(){},toggle(){}}},getElementById:()=>root,addEventListener(){},activeElement:null,body:{}},location:{hash:'#search',search:''},navigator:{onLine:true},CSS:{escape:s=>s},URLSearchParams,setTimeout,clearTimeout,setInterval,clearInterval,addEventListener(){}};
+ context.window=context;vm.createContext(context);vm.runInContext(read('nutrition.js'),context);await new Promise(setImmediate);
+ const f={dataset:{form:'search'},q:{value:'liquid'}};listeners.submit({preventDefault(){},target:{closest:()=>f}});await new Promise(setImmediate);
+ const key=root.innerHTML.match(/data-act="open-product"[^>]*data-key="([^"]+)"/)?.[1]||root.innerHTML.match(/data-key="([^"]+)"/)?.[1];assert.ok(key);
+ const button={dataset:{act:'open-product',key}};listeners.click({preventDefault(){},target:{closest:()=>button}});await new Promise(setImmediate);
+ assert.equal(reads,1);assert.equal(writes,0);assert.match(root.innerHTML,/Miktar \(ml\)/);assert.match(root.innerHTML,/Kaynak güncellemesi: 2026-11-16T10:00:00Z/);assert.match(root.innerHTML,/Alındı: 2026-11-17T12:00:00Z/);
+});

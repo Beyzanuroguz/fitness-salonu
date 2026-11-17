@@ -222,3 +222,16 @@ onboarding ve şifreli offsite yedek/alarmlar. Bundled mod yayına hazır değil
   dışında. Birim/kalıcılık iyileştirmeleri ayrıca değerlendirilmelidir.
   Ayrı unified-ux ve turnstiles dalları birleştirilmedi. Önceki ticari ve bundled
   yayın engelleri kapanmadı. Main merge, GitHub push ve canlı dağıtım yapılmadı.
+
+
+## Son Nutrition+ takip birleşimi — 7d5f57f
+
+- Önceki `28613d4` birleşimi ve V7/V8/V9/PWA ekran sadeleştirmeleri korundu.
+  `7d5f57f` artık integration/v9 kapsamındadır; önceki “takip/dışında” notu tarihseldir.
+- PASS: **126/126** ana ve mobil test, yalnız izole SQLite; menü `/nutrition/`;
+  `git diff --check` temiz. Kaynak zamanları, miktar öncesi ürün detaylandırma,
+  birim doğrulaması ve kapatılıp açılan geçici SQLite'ta kalıcılık kapsamda.
+- CSP/oturum güvenliği, V9.5 mobil yapılandırması ve eski endpointler korunur.
+  Gerçek müşteri SQLite dosyası açılmadı/değiştirilmedi.
+- NOT TESTED: görsel tarayıcı, fiziksel barkod/kamera, PWA kurulumu, canlı HTTPS.
+  Mevcut ticari ve bundled yayın engelleri kapanmadı. Main merge/push ve dağıtım yok.
