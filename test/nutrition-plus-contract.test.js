@@ -38,3 +38,38 @@ test('ml never silently becomes grams; ambiguous sources and invalid goals are r
  await assert.rejects(route('POST','/api/nutrition-plus/logs',{food_id:p.id,grams:100,day:'2026-11-17',meal:'lunch'},{id:1}),e=>e.status===422);
  const c=require('../public/nutrition/nutrition-core');assert.throws(()=>c.recipePer100([{product:p,amount:200}]),/ölçülmüş/);
 });
+
+test('favorites, meals, goals and recipe ingredients survive a SQLite close/reopen without cross-account leakage',async t=>{
+ const fs=require('node:fs'),os=require('node:os'),path=require('node:path');
+ const temp=fs.mkdtempSync(path.join(os.tmpdir(),'formclub-np-persistence-'));
+ t.after(()=>fs.rmSync(temp,{recursive:true,force:true}));const file=path.join(temp,'isolated.sqlite');
+ let db=new DatabaseSync(file);
+ try{
+  db.exec('PRAGMA foreign_keys=ON;CREATE TABLE users(id INTEGER PRIMARY KEY);INSERT INTO users VALUES(1),(2)');
+  let handler=create(db);const u={id:1},call=(m,p,b={})=>handler(m,'/api/nutrition-plus'+p,b,u);
+  const p=await call('POST','/foods',{name:'Persistent fixture',basis:'g',nutrients:{kcal:100,protein:2,carbs:null,fat:0}});
+  await call('PATCH',`/foods/${p.id}/favorite`,{favorite:true});
+  await call('POST','/logs',{food_id:p.id,amount:150,unit:'g',meal:'dinner',day:'2026-11-17'});
+  await call('PATCH','/goals',{kcal:2100,protein:120,carbs:250,fat:70});
+  const recipe=await call('POST','/recipes',{name:'Persistent recipe',ingredients:[{food_id:p.id,amount:150,unit:'g'}],yield_grams:120,portions:2});
+  db.close();db=new DatabaseSync(file);db.exec('PRAGMA foreign_keys=ON');handler=create(db);
+  assert.equal((await call('GET','/foods',{filter:'favorites'}))[0].id,p.id);
+  const history=await call('GET','/history',{date:'2026-11-17'});assert.equal(history.logs[0].meal,'dinner');assert.equal(history.totals.known.kcal,150);assert.equal(history.totals.missing.carbs,1);
+  assert.equal((await call('GET','/goals')).goals.kcal,2100);
+  const r=(await call('GET','/foods',{filter:'recipes'}))[0];assert.equal(r.id,recipe.id);assert.equal(r.ingredients[0].food_id,p.id);assert.equal(r.ingredients[0].amount,150);assert.equal(r.nutrients.carbs,null);assert.equal(r.serving_grams,60);
+  assert.deepEqual(await handler('GET','/api/nutrition-plus/foods',{}, {id:2}),[]);
+  assert.equal((await handler('GET','/api/nutrition-plus/goals',{}, {id:2})).goals,null);
+  await assert.rejects(call('POST','/recipes',{name:'Invalid units',ingredients:[{food_id:p.id,ml:100}],yield_grams:100,portions:1}),e=>e.status===422);
+ }finally{db.close();}
+});
+
+test('search results require read-only detail lookup; source metadata and recipe provenance survive the adapter',async t=>{
+ const {clients:[api],db}=fixture(t);
+ const hit=(await api.search('synthetic')).products[0];assert.equal(hit.detailsLoaded,false);
+ const full=await api.barcode(hit.sourceId);assert.equal(full.detailsLoaded,true);assert.equal(full.basis,'ml');assert.equal(db.prepare('SELECT count(*) n FROM np_foods').get().n,0);
+ await assert.rejects(api.saveRecipe({name:'Unit changed',items:[{product:hit,amount:100}],yieldGrams:100}),e=>e.status===422);
+ const saved=await api.select(full.sourceId);const recipe=await api.saveRecipe({name:'Provenance fixture',items:[{product:saved,amount:100}],yieldGrams:80});
+ assert.equal(recipe.ingredients.length,1);assert.equal(recipe.ingredients[0].unit,'ml');assert.equal(recipe.ingredients[0].source.kind,'openfoodfacts');assert.ok(recipe.ingredients[0].retrievedAt);
+ const C=require('../public/nutrition/nutrition-core');const p=C.normalizeProduct({name:'Dates',source:'Open Food Facts',retrieved_at:'2026-11-17T10:00:00Z',updated_at:'2026-11-16T10:00:00Z'});
+ assert.equal(p.retrievedAt,'2026-11-17T10:00:00Z');assert.equal(p.updatedAt,'2026-11-16T10:00:00Z');
+});

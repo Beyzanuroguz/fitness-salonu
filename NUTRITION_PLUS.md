@@ -75,7 +75,7 @@ NODE_ENV=test FITNESS_DB_PATH=:memory: node --test test/*.test.js tests/*.test.j
 git diff --check
 ```
 
-**121/121 PASS**, 0 başarısız/atlanan. Eski V8 adapter'ı açık `contract:'v8'`
+**125/125 PASS**, 0 başarısız/atlanan. Eski V8 adapter'ı açık `contract:'v8'`
 seçimiyle regresyon testinde korunur; yeni ekranın varsayılan adapter'ı Nutrition+.
 Yeni sözleşme testleri: ürün seçimi/lookup, kaynak makrolarına güven, gram/ml,
 favoriler, öğünler, tarif malzemeleri ve null yayılımı, hedef kalıcılığı/silme,
@@ -92,7 +92,7 @@ kaydıdır; kodda örnek veya varsayılan besin değeri olarak kullanılmaz.
 
 ## Tarayıcı test adresi ve kalan eksikler
 
-Bu görevde açılan geçici sunucu: `http://127.0.0.1:52110/nutrition/`.
+Önceki entegrasyon kontrolünde açılmış geçici sunucu (bu incelemede başlatılmadı): `http://127.0.0.1:52110/nutrition/`.
 İlk olarak `http://127.0.0.1:52110/` üzerinden yalnız test yöneticisi hesabı
 oluşturup Beslenme menüsüne gidilebilir. Veritabanı tamamen bellektedir; sunucu
 kapanınca test hesapları ve kayıtlar kaybolur. Gerçek salon sunucusu kullanılmadı.
@@ -113,3 +113,31 @@ kapanınca test hesapları ve kayıtlar kaybolur. Gerçek salon sunucusu kullan�
 
 Yalnız `feature/nutrition-plus` üzerinde commit; integration/v9 veya main'e merge,
 GitHub push veya canlı dağıtım yok.
+
+
+## Birleştirme sonrası sözleşme incelemesi
+
+`70000b4` üzerindeki tüm dosyalar ve `ab5f06e` korundu; dosya silme/reset/clean
+uygulanmadı. Beslenme menüsü `/nutrition/?embedded=1` adresine bağlı kalır.
+Yeni ekrandan V8 beslenme/VKİ ekranına bağlantı eklendi.
+
+Arama indeksi ürünün gram/ml bazını döndürmediğinden, arama sonucunu açmak önce
+salt okunur barkod detayını getirir. Miktar ve porsiyon formu gerçek baz öğrenildikten
+sonra açılır; bu okuma ürün kaydetmez. Tarif kaydında kaynak ürünün birimi değişmişse
+miktar sessizce başka birime çevrilmez, kullanıcıdan yeniden girmesi istenir.
+Desteklenmeyen baza sahip ürünler öğüne/tarife eklenemez. Kaynak alım/güncelleme
+zamanları ve saklanmış tarif malzemelerinin kaynakları ürün detayında gösterilir.
+Geçersiz kaynak tarihleri “Bilinmiyor” olarak kalır.
+
+Kalıcılık ayrıca test için oluşturulmuş geçici SQLite dosyası kapatılıp yeniden
+açılarak doğrulandı: favoriler, akşam öğünü, kalori/makro hedefleri, tarif malzemeleri,
+porsiyon ağırlığı ve eksik makrolar korunur; diğer hesap bunları göremez.
+Tüm ana ve mobil paket: **125 test geçti, 0 başarısız/atlanan**. HTTP testleri
+geçici portlar için sandbox dışında, yalnız izole DB ile çalıştırıldı.
+`git diff --check` ve staged diff denetimi uygulandı.
+Gerçek `fitness.sqlite` dosyasının SHA-1 özeti değişmedi:
+`27bca8ca772162f333ca2bc3078959926acab7af`.
+
+Bu son inceleme yeni canlı API veya görsel tarayıcı kanıtı üretmez; yukarıdaki
+canlı API kayıtları önceki kontrollerin kanıtlarıdır. Fiziksel kamera, görsel mobil
+kontrol, ölçüm geçmişi, tarif düzenleme/silme ve V8 veri aktarımı sınırlamaları sürer.

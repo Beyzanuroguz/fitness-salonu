@@ -151,14 +151,14 @@ function createPlusApi({fetchImpl,base='',online=()=>true}={}){
  return {
   mode:'live',preview:false,caps:PLUS_CAPS,endpoints:PLUS_ENDPOINTS,
   async me(){const r=await call(PLUS_ENDPOINTS.me);if(!r?.user)fail(401,'Oturum bulunamadı');return {id:r.user.id,role:r.user.role,name:r.user.username};},
-  async search(q){q=String(q||'').trim();if(q.length<2||q.length>100)fail(400,'Arama 2–100 karakter olmalı');const r=await call(PLUS_ENDPOINTS.search+'?q='+encodeURIComponent(q));return {products:(r.products||[]).map(p=>product({...p,source:'Open Food Facts'})).filter(Boolean),attribution:r.attribution};},
+  async search(q){q=String(q||'').trim();if(q.length<2||q.length>100)fail(400,'Arama 2–100 karakter olmalı');const r=await call(PLUS_ENDPOINTS.search+'?q='+encodeURIComponent(q));return {products:(r.products||[]).map(p=>product({...p,source:'Open Food Facts',details_loaded:false})).filter(Boolean),attribution:r.attribution};},
   async barcode(code){const c=Core.checkBarcode(code);if(c.status==='format')fail(400,'Barkod biçimi geçersiz');try{return product(await call(PLUS_ENDPOINTS.barcode+'?code='+encodeURIComponent(c.code)))}catch(e){if([404,422].includes(e.status))e.kind='notFoundBarcode';throw e}},
   async select(code){return product(await call(PLUS_ENDPOINTS.select,'POST',{code:String(code)}));},
   async createFood({name,per100,basis='g'}){return product(await call(PLUS_ENDPOINTS.foods,'POST',{name,basis,nutrients:per100}));},
   async foods(){return list('all')},async recents(){return list('recent')},async recipes(){return list('recipes')},async favorites(){return list('favorites')},
   async toggleFavorite(id){const rows=await call(PLUS_ENDPOINTS.foods);const row=rows.find(p=>p.id===Number(id));if(!row)fail(404,'Besin bulunamadı');const favorite=!row.favorite;await call(PLUS_ENDPOINTS.foods+'/'+id+'/favorite','PATCH',{favorite});return {favorite};},
   async saveRecipe({name,items,yieldGrams,portions=1}){
-   const ingredients=[];for(const i of items||[]){const p=i.product.id?i.product:await this.select(i.product.sourceId);ingredients.push({food_id:p.id,amount:i.amount,unit:p.basis});}
+   const ingredients=[];for(const i of items||[]){const p=i.product.id?i.product:await this.select(i.product.sourceId);if(p.basis!==i.product.basis)fail(422,'Ürün birimi değişti. Ürün detaylarını açıp malzeme miktarını yeniden girin.');ingredients.push({food_id:p.id,amount:i.amount,unit:p.basis});}
    return product(await call(PLUS_ENDPOINTS.recipes,'POST',{name,ingredients,yield_grams:yieldGrams,portions}));
   },
   async addLog({productId,amount,unit='g',date,meal}){const value=Core.validAmount(amount);if(value===null)fail(400,'Geçersiz miktar');return call(PLUS_ENDPOINTS.logs,'POST',{food_id:productId,amount:value,unit,day:date,meal});},

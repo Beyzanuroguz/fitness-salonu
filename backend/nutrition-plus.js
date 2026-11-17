@@ -42,7 +42,7 @@ module.exports = function(db, fetcher=fetch) {
   const servingUnit=p.serving_quantity_unit;
   const servingAmount=Number(p.serving_quantity)*(servingUnit==='l'?1000:servingUnit==='cl'?10:1);
   const serving=(mass&&servingUnit==='g'||volume&&volumeUnits.includes(servingUnit))&&servingAmount>0&&servingAmount<=5000?servingAmount:null;
-  return {name:String(p.product_name).slice(0,200),nutrients,serving_grams:mass?serving:null,serving_ml:volume?serving:null,source:'Open Food Facts',source_id:String(code),source_url:`https://world.openfoodfacts.org/product/${code}`,source_license:'ODbL-1.0 / DbCL-1.0',retrieved_at:new Date().toISOString(),updated_at:Number.isFinite(p.last_modified_t)&&p.last_modified_t>0?new Date(p.last_modified_t*1000).toISOString():null,basis,serving_label:String(p.serving_size||'').slice(0,100)};
+  return {name:String(p.product_name).slice(0,200),nutrients,serving_grams:mass?serving:null,serving_ml:volume?serving:null,source:'Open Food Facts',source_id:String(code),source_url:`https://world.openfoodfacts.org/product/${code}`,source_license:'ODbL-1.0 / DbCL-1.0',retrieved_at:new Date().toISOString(),updated_at:Number.isFinite(p.last_modified_t)&&p.last_modified_t>0&&Number.isFinite(new Date(p.last_modified_t*1000).getTime())?new Date(p.last_modified_t*1000).toISOString():null,basis,serving_label:String(p.serving_size||'').slice(0,100)};
  }
  return async(method,path,b,u)=>{
   if(!u)fail('Oturum gerekli',401);
@@ -83,7 +83,7 @@ module.exports = function(db, fetcher=fetch) {
    const ingredients=b.ingredients.map(i=>{
     if(!i||typeof i!=='object')fail('Geçersiz malzeme');
     const f=own(i.food_id,uid),unit=f.basis==='100ml'?'ml':'g';
-    if(!['100g','100ml'].includes(f.basis)||i.unit&&i.unit!==unit||unit==='ml'&&i.grams!==undefined)fail('Malzeme birimi uyuşmuyor',422);
+    if(!['100g','100ml'].includes(f.basis)||i.unit&&i.unit!==unit||unit==='ml'&&i.grams!==undefined||unit==='g'&&i.ml!==undefined)fail('Malzeme birimi uyuşmuyor',422);
     const amount=num(i.amount??(unit==='ml'?i.ml:i.grams),0.01,5000);
     keys.forEach(k=>{sums[k]=sums[k]===null||f.nutrients[k]===null?null:sums[k]+f.nutrients[k]*amount/100;});
     return {food_id:f.id,name:f.name,amount,unit,grams:unit==='g'?amount:null,ml:unit==='ml'?amount:null,source:f.source,source_url:f.source_url||null,retrieved_at:f.retrieved_at||null};

@@ -80,10 +80,13 @@ function normalizeProduct(raw) {
     barcode,
     basis,
     supported:raw.basis!=='unsupported',
+    detailsLoaded:raw.details_loaded!==false,
     per100,
     servings,
     source: sourceInfo(raw),
     retrievedAt: raw.retrieved_at || '',
+    updatedAt: raw.updated_at || '',
+    ingredients: Array.isArray(raw.ingredients) ? raw.ingredients.map(i=>({name:String(i.name||''),amount:toNum(i.amount??i.grams??i.ml),unit:i.unit==='ml'?'ml':'g',source:sourceInfo(i),retrievedAt:i.retrieved_at||''})) : [],
     preview: !!raw.preview
   };
 }
