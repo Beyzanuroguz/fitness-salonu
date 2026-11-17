@@ -41,7 +41,7 @@ function tabBar(items){const list=(tabItems[role]||[]).map(id=>items.find(x=>x[0
 // iOS Safari has no install prompt; explain "Ana Ekrana Ekle" once until dismissed.
 function installHint(){try{const nav=globalThis.navigator||{},standalone=globalThis.matchMedia?.('(display-mode: standalone)').matches||nav.standalone===true,ios=/iphone|ipad|ipod/i.test(nav.userAgent||'')||(nav.platform==='MacIntel'&&nav.maxTouchPoints>1);if(!ios||standalone||localStorage.getItem('formclub:ios-hint')==='1')return ''}catch{return ''}return `<div class="install-hint" role="note"><span>Uygulama gibi kullanmak için Safari'de <b>Paylaş</b> › <b>Ana Ekrana Ekle</b>.</span><button class="close" data-act="hidehint" aria-label="İpucunu kapat">×</button></div>`}
 function content(){
- if(page==='nutrition')return moduleFrame('/v8.html?embedded=1','Beslenme ve VKİ');
+ if(page==='nutrition')return moduleFrame('/nutrition-plus.html?embedded=1','Nutrition+');
  if(['entry','scan','performance','notifications'].includes(page))return moduleFrame('/v9/index.html?embedded=1#'+(page==='entry'?'qr':page),navItems[role].find(x=>x[0]===page)?.[2]||page);
  if(page==='renewals')return memberList();
  if(page==='attendance')return attendanceView();

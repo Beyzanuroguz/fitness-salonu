@@ -847,3 +847,7 @@ HTTP testleri geçici yerel port, V8 süreç testi geçici dizinde SQLite kullan
 
 V9.5 bağımsız sentetik staging kurulumu ve mobil HTTPS yapılandırması:
 [deploy/STAGING.md](deploy/STAGING.md).
+
+## Nutrition+ (V9.5 devamı)
+
+Ana uygulamanın Beslenme sekmesi artık kişisel Nutrition+ ekranını açar. Mevcut V8 ekranına bu ekrandaki bağlantıyla erişilir. Open Food Facts arama/barkod, gram-porsiyon, öğün günlüğü, dönem grafikleri, favori/son tüketilen ve tarifler için API sözleşmeleri, 96 testin sonucu, gerçek API doğrulaması ve kalan sınırlar: [NUTRITION_PLUS.md](NUTRITION_PLUS.md).
