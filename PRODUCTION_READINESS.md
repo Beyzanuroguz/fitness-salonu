@@ -235,3 +235,24 @@ onboarding ve şifreli offsite yedek/alarmlar. Bundled mod yayına hazır değil
   Gerçek müşteri SQLite dosyası açılmadı/değiştirilmedi.
 - NOT TESTED: görsel tarayıcı, fiziksel barkod/kamera, PWA kurulumu, canlı HTTPS.
   Mevcut ticari ve bundled yayın engelleri kapanmadı. Main merge/push ve dağıtım yok.
+
+## Unified UX birleşimi — 8204f8c
+
+- PASS: 145/145 ana ve mobil test, yalnız izole SQLite; diff kontrolü temiz.
+- PASS (VM/kod): masaüstü sol menü, mobil hamburger çekmecesi, odak/Escape/inert
+  davranışı, menünün altına sabit gerçek logout ve başarısız çıkışın doğru bildirimi.
+  Beslenme menüsü mevcut `/nutrition/` ekranını açar; kullanıcı metinlerinde sürüm
+  isimleri yoktur. Önceki Nutrition+ ve mobil güvenlik düzeltmeleri korunur.
+- PASS: Nutrition+ `/profile` uçları, sunucuda otomatik kalori hesabı, açık manuel
+  hedef, kısmi güncelleme, profil/hedef için atomik kayıt ve kimlik izolasyonu.
+  Hedef silme veya başka Nutrition+ ekranından değiştirme kabuğa eşlenir; eksik
+  kayıt onayı başarı sayılmaz. Özel profil browser storage/cache'e yazılmaz.
+- PASS: geçici SQLite kapatılıp açılarak kalıcılık; gerçek HTTP oturum/CSRF/no-store
+  ve logout sonrası 401. Güvenlik başlıkları ve CORS politikası gevşetilmedi.
+- NOT TESTED: yeni görsel/gerçek cihaz kabulü ve canlı TLS/proxy. Profil sağlık
+  durumu alanları içerir; KVKK/erişim/saklama süreçleri hâlâ yayın kapısıdır.
+- Önceki MFA/hesap yönetimi, ödeme, offsite yedek/alarmlar, ölçüm geçmişi ve
+  bundled mobil yayın eksikleri kapanmadı. Gerçek fitness.sqlite değiştirilmedi;
+  main merge/push veya canlı dağıtım yapılmadı.
+
+Ayrıntılı uygulanan sözleşme: `docs/profile-goals-api.md`.

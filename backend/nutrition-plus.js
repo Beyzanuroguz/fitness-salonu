@@ -1,4 +1,5 @@
 'use strict';
+const Energy=require('../public/energy');
 const keys = ['kcal', 'protein', 'carbs', 'fat'];
 const meals = ['breakfast', 'lunch', 'dinner', 'snack'];
 const fail = (s, status=400) => { throw Object.assign(Error(s), {status}); };
@@ -8,6 +9,7 @@ const round = n => Math.round(n*100)/100;
 module.exports = function(db, fetcher=fetch) {
  db.exec(`CREATE TABLE IF NOT EXISTS np_foods(id INTEGER PRIMARY KEY,user_id INTEGER NOT NULL REFERENCES users(id),name TEXT NOT NULL,data TEXT NOT NULL,favorite INTEGER NOT NULL DEFAULT 0);
  CREATE TABLE IF NOT EXISTS np_logs(id INTEGER PRIMARY KEY,user_id INTEGER NOT NULL REFERENCES users(id),food_id INTEGER NOT NULL REFERENCES np_foods(id),grams REAL NOT NULL,meal TEXT NOT NULL,day TEXT NOT NULL);
+ CREATE TABLE IF NOT EXISTS np_energy_profiles(user_id INTEGER PRIMARY KEY REFERENCES users(id),data TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS np_goals(user_id INTEGER PRIMARY KEY REFERENCES users(id),data TEXT NOT NULL);
  CREATE INDEX IF NOT EXISTS np_owner_day ON np_logs(user_id,day);`);
  if(!db.prepare('PRAGMA table_info(np_logs)').all().some(c=>c.name==='unit'))db.exec("ALTER TABLE np_logs ADD COLUMN unit TEXT NOT NULL DEFAULT 'g'");
@@ -44,15 +46,53 @@ module.exports = function(db, fetcher=fetch) {
   const serving=(mass&&servingUnit==='g'||volume&&volumeUnits.includes(servingUnit))&&servingAmount>0&&servingAmount<=5000?servingAmount:null;
   return {name:String(p.product_name).slice(0,200),nutrients,serving_grams:mass?serving:null,serving_ml:volume?serving:null,source:'Open Food Facts',source_id:String(code),source_url:`https://world.openfoodfacts.org/product/${code}`,source_license:'ODbL-1.0 / DbCL-1.0',retrieved_at:new Date().toISOString(),updated_at:Number.isFinite(p.last_modified_t)&&p.last_modified_t>0&&Number.isFinite(new Date(p.last_modified_t*1000).getTime())?new Date(p.last_modified_t*1000).toISOString():null,basis,serving_label:String(p.serving_size||'').slice(0,100)};
  }
+ function goalsOf(uid){return JSON.parse(db.prepare('SELECT data FROM np_goals WHERE user_id=?').get(uid)?.data||'null')}
+ function storedProfile(uid){return JSON.parse(db.prepare('SELECT data FROM np_energy_profiles WHERE user_id=?').get(uid)?.data||'null')}
+ function profileOf(uid){const profile=storedProfile(uid),goals=goalsOf(uid);return profile||(goals?{...Energy.DEFAULT_PROFILE,target_mode:'manual',manual_kcal:goals.kcal}:null)}
+ function writeProfile(uid,profile){db.prepare('INSERT INTO np_energy_profiles VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET data=excluded.data').run(uid,JSON.stringify(profile))}
+ function transaction(fn){db.exec('BEGIN IMMEDIATE');try{const result=fn();db.exec('COMMIT');return result}catch(e){db.exec('ROLLBACK');throw e}}
+ function patchProfile(uid,body){
+  const fields=['age','sex','height_cm','weight_kg','activity','goal','pregnancy','medical','target_mode','manual_kcal'];
+  for(const k of Object.keys(body))if(!fields.includes(k))fail('Bilinmeyen profil alanı');
+  const p={...Energy.normalizeProfile(profileOf(uid))};
+  for(const [k,v] of Object.entries(body)){
+   if(['age','height_cm','weight_kg','manual_kcal'].includes(k)){
+    if(v===null||v===''){p[k]='';continue}
+    const ranges={age:[18,100],height_cm:[100,250],weight_kg:[30,350],manual_kcal:[800,6000]};
+    p[k]=num(v,...ranges[k]);if(['age','manual_kcal'].includes(k)&&!Number.isInteger(p[k]))fail('Yaş ve kalori tam sayı olmalı');
+   }else if(['pregnancy','medical'].includes(k)){if(typeof v!=='boolean')fail('Geçersiz durum bilgisi');p[k]=v;
+   }else{
+    const options={sex:['male','female','',null],activity:Energy.ACTIVITY.map(x=>x.id),goal:Energy.GOALS.map(x=>x.id),target_mode:['auto','manual','unset']};
+    if(!options[k].includes(v))fail('Geçersiz profil seçimi');p[k]=v??'';
+   }
+  }
+  const target=Energy.resolveTarget(p);
+  if(p.target_mode!=='unset'&&(target.kcal===null||target.kcal<800||target.kcal>6000))fail('Profil bilgileriyle geçerli hedef hesaplanamadı. Bilgileri kontrol edin veya manuel hedef seçin.',422);
+  const saved={...p,updated_at:new Date().toISOString()};
+  for(const k of ['age','height_cm','weight_kg','manual_kcal'])if(saved[k]==='')saved[k]=null;
+  return transaction(()=>{
+   writeProfile(uid,saved);
+   if(target.kcal===null)db.prepare('DELETE FROM np_goals WHERE user_id=?').run(uid);
+   else {const goals={protein:null,carbs:null,fat:null,...goalsOf(uid),kcal:target.kcal};db.prepare('INSERT INTO np_goals VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET data=excluded.data').run(uid,JSON.stringify(goals));}
+   return {profile:saved,goals:goalsOf(uid)};
+  });
+ }
  return async(method,path,b,u)=>{
   if(!u)fail('Oturum gerekli',401);
   if(!b||typeof b!=='object'||Array.isArray(b))fail('JSON nesnesi gerekli');
   if(b.user_id!==undefined&&Number(b.user_id)!==u.id||b.member_id!==undefined&&Number(b.member_id)!==u.member_id)fail('Yalnızca kendi kayıtlarınıza erişebilirsiniz',403);
   const route=path.slice('/api/nutrition-plus'.length), uid=u.id;
+  if(route==='/profile'){
+   if(method==='GET')return {profile:profileOf(uid),goals:goalsOf(uid)};
+   if(method==='PATCH')return patchProfile(uid,b);
+  }
   if(route==='/goals'){
-   if(method==='GET')return {goals:JSON.parse(db.prepare('SELECT data FROM np_goals WHERE user_id=?').get(uid)?.data||'null')};
-   if(method==='DELETE'){db.prepare('DELETE FROM np_goals WHERE user_id=?').run(uid);return {ok:true};}
-   if(method==='PATCH'){const goals={kcal:num(b.kcal,800,6000)};for(const k of ['protein','carbs','fat'])goals[k]=b[k]===null||b[k]===undefined?null:num(b[k],0,1000);db.prepare('INSERT INTO np_goals VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET data=excluded.data').run(uid,JSON.stringify(goals));return {goals};}
+   if(method==='GET')return {goals:goalsOf(uid)};
+   if(method==='DELETE')return transaction(()=>{db.prepare('DELETE FROM np_goals WHERE user_id=?').run(uid);const profile=storedProfile(uid);if(profile)writeProfile(uid,{...profile,target_mode:'unset',updated_at:new Date().toISOString()});return {ok:true};});
+   if(method==='PATCH'){
+    const goals={kcal:num(b.kcal,800,6000)};for(const k of ['protein','carbs','fat'])goals[k]=b[k]===null||b[k]===undefined?null:num(b[k],0,1000);
+    return transaction(()=>{db.prepare('INSERT INTO np_goals VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET data=excluded.data').run(uid,JSON.stringify(goals));const profile=storedProfile(uid);if(profile)writeProfile(uid,{...profile,target_mode:'manual',manual_kcal:goals.kcal,updated_at:new Date().toISOString()});return {goals};});
+   }
   }
   if(method==='POST'&&route==='/foods'){
    const name=String(b.name||'').trim();if(name.length<2||name.length>200||!['g','ml'].includes(b.basis)||!b.nutrients||typeof b.nutrients!=='object')fail('Ürün adı, baz birimi ve etiket değerleri gerekli');

@@ -2,7 +2,7 @@
    - App shell is precached; pages are network-first with an offline fallback.
    - Static V9 files use stale-while-revalidate.
    - /api/ requests are never cached: QR tokens, notifications and reports are personal and short-lived. */
-const VERSION = 'v9.0.4';
+const VERSION = 'v9.0.5';
 const PREFIX = 'formclub-v9-';
 const SHELL = PREFIX + 'shell-' + VERSION;
 const RUNTIME = PREFIX + 'runtime-' + VERSION;

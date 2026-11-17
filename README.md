@@ -866,3 +866,10 @@ sadeleştirilmiştir. Ayrı unified-ux/turnstiles dalları bu birleşime dahil d
 Arama ürünleri miktar formundan önce detaylandırılır; kaynak zamanları ve tarif
 malzeme kaynakları gösterilir. Favori/öğün/hedef/tarif kalıcılığı geçici SQLite
 kapatılıp yeniden açılarak doğrulanmıştır.
+
+Unified UX (`8204f8c`) entegrasyonu: masaüstü sol menü, mobil hamburger çekmecesi
+ve menü altında gerçek “Çıkış Yap”. Beslenme `/nutrition/` olarak korunur.
+Kalori hedefim ekranı boy/kilo/yaş/aktivite/formül parametresi üzerinden otomatik
+veya manuel hedefi Nutrition+ profil/hedef API'sine kaydeder; kayıt onayı olmadan
+başarı göstermez. Sözleşme: [docs/profile-goals-api.md](docs/profile-goals-api.md).
+İzole ana ve mobil test sonucu: **145/145 başarılı**.

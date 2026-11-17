@@ -1,0 +1,99 @@
+/* FORM CLUB unified shell: grouped sidebar on desktop, hamburger drawer on phones/tablets,
+   logout pinned to the bottom of the menu. Loaded after style.css and dashboard.css. */
+.sr-only{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.fc-app{display:grid;grid-template-columns:264px minmax(0,1fr);min-height:100vh;min-height:100dvh}
+.fc-mobilebar,.fc-scrim,.fc-close{display:none}
+.fc-side{position:sticky;top:0;height:100vh;height:100dvh;display:flex;flex-direction:column;background:#101713;border-right:1px solid #29332b;min-width:0}
+.fc-side-head{padding:22px 14px 6px;position:relative}
+.fc-side-head .logo{padding:4px 12px 8px}
+.fc-side-head .small-label{margin:0 12px 8px}
+.fc-nav{flex:1;overflow-y:auto;overscroll-behavior:contain;padding:4px 10px 14px;scrollbar-width:thin}
+.fc-group{margin-top:12px}
+.fc-group-title{margin:0;padding:6px 12px;font:800 11px 'DM Sans',system-ui,sans-serif;letter-spacing:1.3px;text-transform:uppercase;color:#7f8f83}
+.fc-group ul{list-style:none;margin:0;padding:0}
+.fc-navlink{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:10px 12px;margin:1px 0;border:0;border-radius:11px;background:transparent;color:#b9c5bb;font-weight:600;text-align:left;font-size:14px}
+.fc-navlink .ico{width:22px;text-align:center;font-size:17px;flex:none}
+.fc-navlink:hover{background:#1d2820;color:#eef5ee}
+.fc-navlink.active,.fc-navlink[aria-current=page]{background:#273821;color:#c4f56b;box-shadow:inset 3px 0 0 #b6f548}
+.fc-navlink:focus-visible,.fc-logout:focus-visible,.fc-burger:focus-visible,.fc-close:focus-visible{outline:3px solid #b6f548;outline-offset:2px}
+.fc-side-foot{position:sticky;bottom:0;border-top:1px solid #29342b;background:#101713;padding:12px 12px calc(14px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:10px}
+.fc-user{display:flex;align-items:center;gap:10px;min-width:0;padding:0 4px}
+.fc-avatar{display:grid;place-items:center;width:36px;height:36px;flex:none;border-radius:50%;background:#273821;color:#c4f56b;font-weight:800}
+.fc-user-text{display:flex;flex-direction:column;min-width:0}
+.fc-user-text strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px}
+.fc-user-text small{color:#8f9c91;font-size:12px}
+.fc-logout{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:44px;border:1px solid #5a3a35;border-radius:11px;background:#2a1b19;color:#ffc2b8;font-weight:800}
+.fc-logout:hover{background:#3a2420}
+.fc-logout:disabled{opacity:.6}
+.fc-app>.main{max-width:1600px;width:100%;margin:0 auto;padding:34px clamp(20px,4vw,60px)}
+
+/* Phones and small tablets: drawer */
+@media (max-width:899px){
+  .fc-app{display:block}
+  .fc-mobilebar{position:sticky;top:0;z-index:45;display:flex;align-items:center;gap:10px;padding:calc(8px + env(safe-area-inset-top,0px)) 12px 8px;background:rgba(16,23,19,.97);border-bottom:1px solid #29332b;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+  .fc-mobilebar .logo{padding:0;font-size:19px;white-space:nowrap}
+  .fc-mobile-title{margin-left:auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#b9c5bb;font-weight:700;font-size:14px}
+  .fc-burger{display:grid;place-items:center;width:44px;height:44px;flex:none;border:1px solid #344235;border-radius:12px;background:#1b261d;color:#eef5ee}
+  .fc-burger-ico,.fc-burger-ico::before,.fc-burger-ico::after{display:block;width:20px;height:2px;border-radius:2px;background:currentColor;position:relative}
+  .fc-burger-ico::before,.fc-burger-ico::after{content:"";position:absolute;left:0}
+  .fc-burger-ico::before{top:-6px}.fc-burger-ico::after{top:6px}
+  .fc-side{position:fixed;left:0;top:0;bottom:0;z-index:60;width:min(320px,86vw);height:100%;transform:translateX(-102%);visibility:hidden;transition:transform .22s ease,visibility 0s linear .22s;box-shadow:12px 0 40px rgba(0,0,0,.45);padding-top:env(safe-area-inset-top,0px)}
+  .fc-side.open{transform:none;visibility:visible;transition:transform .22s ease}
+  .fc-close{display:grid;place-items:center;position:absolute;right:10px;top:16px;width:44px;height:44px;border:1px solid #344235;border-radius:12px;background:#1b261d;color:#eef5ee;font-size:24px;line-height:1}
+  .fc-scrim{position:fixed;inset:0;z-index:55;display:block;background:rgba(0,0,0,.55)}
+  .fc-scrim[hidden]{display:none}
+  body.menu-open{overflow:hidden}
+  .fc-app>.main{padding:16px 12px 24px}
+  .fc-app .top{flex-direction:column;gap:8px;margin-bottom:14px}
+  .fc-app .top .eyebrow,.fc-app .top-date{display:none}
+  .fc-app .top h1{font-size:23px;margin:2px 0}
+  .fc-app .toolbar:empty{display:none}
+}
+@media (max-width:680px){
+  .fc-app>.main{padding-bottom:calc(var(--tab-h,62px) + env(safe-area-inset-bottom,0px) + 20px)}
+  .fc-side-foot{padding-bottom:calc(14px + env(safe-area-inset-bottom,0px))}
+}
+
+/* Calorie target (energy.js) */
+.energy .panel-title{margin-bottom:6px}
+.en-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:18px;align-items:start}
+@media (min-width:1100px){.en-grid{grid-template-columns:minmax(0,1.3fr) minmax(280px,1fr)}.en-result{position:sticky;top:20px}}
+.en-form{display:flex;flex-direction:column;gap:14px;min-width:0}
+.en-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+@media (max-width:420px){.en-row{grid-template-columns:repeat(2,minmax(0,1fr))}.en-row .en-field:first-child{grid-column:1/-1}}
+.en-field{display:flex;flex-direction:column;gap:6px;min-width:0;font-size:13px;font-weight:700;color:#c3cfc5}
+.en-field input{width:100%;min-width:0;min-height:46px;padding:10px 12px;border-radius:11px;border:1px solid #3a4a3e;background:#0f1612;color:#eef5ee;font-size:16px}
+.en-field input:disabled{opacity:.5}
+.en-field.has-error input{border-color:#ff9b8a}
+.en-error{color:#ffb4a6;font-size:12px;font-weight:600}
+.en-choices{border:0;margin:0;padding:0;min-width:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px}
+.en-choices legend{font-size:13px;font-weight:800;color:#c3cfc5;margin-bottom:6px;padding:0}
+.en-choice,.en-check{position:relative;display:flex;gap:10px;align-items:flex-start;min-height:44px;padding:10px 12px;border:1px solid #344235;border-radius:12px;background:#151f19;cursor:pointer}
+.en-choice input,.en-check input{margin-top:3px;accent-color:#b6f548;width:18px;height:18px;flex:none}
+.en-choice span{display:flex;flex-direction:column;gap:2px;min-width:0}
+.en-choice small{color:#93a596;font-size:12px}
+.en-choice:has(input:checked){border-color:#b6f548;background:#1f2e1a}
+.en-choice:has(input:focus-visible),.en-check:has(input:focus-visible){outline:3px solid #b6f548;outline-offset:2px}
+.en-result{background:#111a14;border:1px solid #29382e;border-radius:16px;padding:16px;min-width:0}
+.en-target{display:flex;flex-direction:column;gap:2px;margin:0 0 12px}
+.en-target span{color:#93a596;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px}
+.en-target strong{font:800 32px Outfit,system-ui,sans-serif;color:#c4f56b}
+.en-target.empty strong{color:#b9c5bb;font-size:22px}
+.en-target small{color:#93a596}
+.en-kv{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:0 0 8px}
+.en-kv div{background:#18231b;border-radius:11px;padding:8px 10px;min-width:0}
+.en-kv dt{font-size:11px;color:#93a596;font-weight:700}
+.en-kv dd{margin:2px 0 0;font-weight:800;overflow-wrap:anywhere}
+.en-note{margin:8px 0 0;padding:10px 12px;border-radius:12px;font-size:13px}
+.en-note p{margin:6px 0 0}
+.en-block{background:#3d2222;color:#ffc9bf}
+.en-warn{background:#3d3119;color:#ffd68a}
+.en-status{margin:0 0 12px;padding:10px 12px;border-radius:12px;background:#18231b;font-size:13px}
+.en-status-ok{background:#1f3a1d;color:#bff19a}
+.en-status-warn{background:#3d3119;color:#ffd68a}
+.en-status-bad{background:#3d2222;color:#ffc9bf}
+.en-summary{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.en-summary div{display:flex;flex-direction:column;gap:2px}
+.en-summary strong{font:800 22px Outfit,system-ui,sans-serif;color:#c4f56b}
+.small{font-size:12px}
+@media (prefers-reduced-motion:reduce){.fc-side{transition:none!important}}

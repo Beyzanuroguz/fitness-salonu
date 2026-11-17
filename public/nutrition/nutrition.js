@@ -35,7 +35,7 @@ const storeKey = k => `fcn:${mode}:${S.user?.id ?? 'anon'}:${k}`;
 const memory=new Map();
 function load(k){return memory.get(storeKey(k))??null}
 function save(k,v){if(v===null)memory.delete(storeKey(k));else memory.set(storeKey(k),v)}
-async function persistGoals(g){S.goals=!S.preview&&S.caps.serverGoals?await API.saveGoals(g):g;if(S.preview)save('goals',g);}
+async function persistGoals(g){S.goals=!S.preview&&S.caps.serverGoals?await API.saveGoals(g):g;if(S.preview)save('goals',g);if(!S.preview&&S.caps.serverGoals&&window.parent&&window.parent!==window)window.parent.postMessage({type:'formclub:nutrition-goals-updated'},location.origin);}
 
 /* ---------- Product registry: views refer to products by an opaque key ---------- */
 const registry = new Map(); let seq = 0;

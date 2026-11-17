@@ -179,3 +179,14 @@ Birleşik sürüm **126/126** ana ve mobil testle, yalnız bellek içi veya geç
 `git diff --check` temiz. Kaynak feature dalı ile unified-ux/turnstiles worktree'leri
 korundu; main merge, push veya canlı dağıtım yapılmadı. Görsel/fiziksel cihaz kabulü
 ve yukarıda listelenen ürün/yayın eksikleri devam eder.
+
+## Birleşik menü ve kalori profili
+
+`8204f8c` entegrasyonunda Beslenme adresi `/nutrition/` olarak korundu. Yeni
+“Kalori hedefim” menüsü `/api/nutrition-plus/profile` üzerinden kullanıcıya özel
+ölçü/aktivite profilini kaydeder ve mevcut `np_goals` kalorisiyle atomik eşleşir.
+Manuel hedef ölçü değişince korunur; Nutrition+ içinden hedef değiştirme/silme
+ana menü özetine sunucudan doğrulanarak yansır. Sağlık profili browser storage'a
+veya SW cache'e yazılmaz. Ayrıntı: `docs/profile-goals-api.md`.
+Bu birleşimde tüm ana ve mobil paket **145/145 PASS**; gerçek cihaz ve önceki
+ürün/ticari yayın eksikleri devam eder.
