@@ -2,16 +2,18 @@
   "name": "formclub-mobile",
   "version": "0.1.0",
   "private": true,
-  "description": "FORM CLUB iOS/Android Capacitor kabuğu. Backend bu pakete dahil değildir.",
+  "description": "FORM CLUB iOS/Android Capacitor kabu\u011fu. Backend bu pakete dahil de\u011fildir.",
   "license": "UNLICENSED",
   "engines": {
     "node": ">=22.0.0"
   },
   "scripts": {
     "configure": "node scripts/configure.js",
+    "bundle": "node scripts/bundle-web.js",
     "add:ios": "npm run configure && cap add ios",
     "add:android": "npm run configure && cap add android",
     "sync": "npm run configure && cap sync",
+    "sync:bundled": "npm run bundle && FORMCLUB_MODE=bundled cap sync",
     "open:ios": "cap open ios",
     "open:android": "cap open android",
     "doctor": "cap doctor",

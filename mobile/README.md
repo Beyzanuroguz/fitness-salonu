@@ -1,49 +1,81 @@
 # FORM CLUB mobil paket (Capacitor 8.6.2)
 
 Bu klasör iOS ve Android uygulama kabuğudur. Backend (`server.js`, `backend/`, SQLite)
-pakete **dahil edilmez**. Uygulama, yayındaki FORM CLUB sunucusunu HTTPS üzerinden açar.
-Kök `package.json` değişmez; bağımlılıklar yalnızca `mobile/` içine kurulur.
+pakete **dahil edilmez**. Kök `package.json` değişmez; bağımlılıklar yalnızca `mobile/`
+içine kurulur.
 
-## Neden uzak sunucu adresi?
+> **Doğrulama durumu:** Kamera, QR okutma, PWA kurulumu ve native paketler henüz
+> **gerçek iPhone/Android cihazda denenmedi**.
+>
+> Bu makinede JDK, Android SDK ve tam Xcode yok. Bu yüzden APK ve IPA derlenmedi.
+> Doğrulananlar:
+> - `npm test` (yapılandırma, paketleme, gizlilik)
+> - Önceki mobil dalda `cap sync` (her iki mod) raporlandı; bu merge sırasında yeniden çalıştırılmadı.
+> - Önceki mobil dalda `cap doctor` raporlandı; bu merge sırasında yeniden çalıştırılmadı.
 
-Web uygulaması oturumu aynı kökenli çerezle tutar ve API'ye göreli `/api/...` adresleriyle
-gider. Dosyalar uygulamanın içine gömülürse köken `capacitor://localhost` olur; bu durumda
-CORS, `SameSite=None; Secure` çerez veya token tabanlı oturum gibi backend değişiklikleri
-gerekir. Bu yüzden 1. aşamada kabuk `server.url` ile gerçek sunucuyu açar.
+## İki çalışma modu
 
-Capacitor belgeleri `server.url` seçeneğini canlı yeniden yükleme için önerir. Mağaza
-sürümünden önce 2. aşamadaki seçenek ayrıca değerlendirilmelidir.
+| Mod | Web dosyaları | API | Durum |
+| --- | --- | --- | --- |
+| `remote` (varsayılan) | Sunucudan, `server.url` | Aynı köken, mevcut çerez oturumu | Güvenli aynı köken korunur; gerçek cihaz kabulü bekliyor. |
+| `bundled` | Uygulama içinde (`build/web`, `public/` kopyası) | `FORMCLUB_API_URL` | Deneysel paketleme altyapısı. **Yayın BLOKE; giriş/QR desteklenmiyor.** |
 
-## Kurulum
+Capacitor belgeleri `server.url` seçeneğini canlı yeniden yükleme için önerir. Apple,
+yalnızca web sitesini saran uygulamaları 4.2 kuralıyla reddedebilir. Mağaza için hedef
+`bundled` moddur.
+
+### Komutlar
 
 ```bash
 cd mobile
 npm install
-FORMCLUB_SERVER_URL=https://salon-adresi.example npm run sync
+npm test
+
+# remote
+FORMCLUB_SERVER_URL=https://salon.example npm run sync
+
+# bundled (backend desteği geldikten sonra)
+FORMCLUB_API_URL=https://api.salon.example npm run sync:bundled
+
 npm run open:ios        # Xcode gerekir
 npm run open:android    # Android Studio + JDK gerekir
-npm test                # yapılandırma ve gizlilik testleri
+npm run doctor
 ```
 
 | Değişken | Açıklama |
 | --- | --- |
-| `FORMCLUB_SERVER_URL` | Sunucunun `https://` adresi. Sorgu, `#`, kullanıcı adı veya şifre içeremez. Verilmezse uygulama yalnızca "Sunucu adresi yapılandırılmadı" sayfasını açar. |
-| `FORMCLUB_APP_ID` | Mağaza paket kimliği. Varsayılan `com.formclub.app` yer tutucudur; yayından önce değiştirin. Kimlik `cap add` sırasında native projelere yazıldığı için değişince platformları yeniden oluşturun veya Xcode/Gradle içinde de güncelleyin. |
-| `FORMCLUB_ALLOW_CLEARTEXT=1` | Yalnızca yerel ağda `http://` geliştirme sunucusu için (`localhost`, `10.x`, `192.168.x`, `172.16-31.x`, `.local`). Kamera HTTP üzerinde çalışmaz. |
+| `FORMCLUB_MODE` | `remote` (varsayılan) veya `bundled`. `sync:bundled` bunu kendisi ayarlar. |
+| `FORMCLUB_SERVER_URL` | `remote` modu için sunucunun `https://` adresi. Sorgu (`?…`), `#`, kullanıcı adı veya şifre içeremez. Verilmezse yalnızca `www/index.html` kurulum sayfası açılır. |
+| `FORMCLUB_API_URL` | `bundled` modu için API'nin `https://` kökeni. Uygulamaya `runtime-config.js` olarak yazılır. |
+| `FORMCLUB_APP_ID` | Mağaza paket kimliği. Varsayılan `com.formclub.app` yalnızca yer tutucudur. Bu kimlik `cap add` sırasında native projelere yazılır; değişirse Xcode ve Gradle tarafında da güncelleyin. |
+| `FORMCLUB_ALLOW_CLEARTEXT=1` | Yalnızca yerel ağda `http://` ile geliştirme için. Kamera HTTP üzerinde çalışmaz. |
 
-`scripts/configure.js` adresi doğrular ve `www/runtime-config.js` dosyasını üretir (git dışı).
-Bağlantı kesilince `www/offline.html` açılır.
+## Gömülü mimari: web tarafında hazır olanlar
 
-## Native ayarlar (eklendi)
+- `public/runtime-config.js` uygulama ayarını tanımlar: `window.FORMCLUB_CONFIG = { apiBase, native }`.
+  - Web sunucusundaki dosyada `apiBase: ''`. Davranış aynı kalır: aynı köken, çerez oturumu.
+  - `scripts/bundle-web.js` yalnızca paket kopyasında bu dosyayı `{ apiBase: FORMCLUB_API_URL, native: true }` ile değiştirir.
+- `app.js`, `v8.js` ve `v9/v9.js` API çağrılarının başına `apiBase` ekler. `apiBase` doluysa istekler `credentials: 'include'` ile gider.
+- `native: true` olduğunda service worker kaydedilmez. `sw.js` ve `v9/sw.js` pakete kopyalanmaz.
+- Paketleme yalnızca `public/` klasörünü okur. `.sqlite`, `.db`, `.env`, `.pem` ve `.key` dosyası bulursa durur.
+- Uygulamanın yerel kökenleri:
+  - Android: `https://localhost` (`androidScheme: 'https'`)
+  - iOS: `capacitor://localhost`
 
-- iOS `ios/App/App/Info.plist`: `NSCameraUsageDescription` (QR okutma için kamera).
-- Android `AndroidManifest.xml`: `android.permission.CAMERA` ve
-  `android.hardware.camera` (`required="false"`). Capacitor `BridgeWebChromeClient`,
-  WebView kamera isteğinde çalışma zamanı iznini ister.
-- Android: `allowMixedContent: false`, `webContentsDebuggingEnabled: false`.
-- iOS projesi Swift Package Manager kullanır; CocoaPods gerekmez.
+### Bundled yayın durumu: BLOKE / deneysel
 
-## Aşamalı plan
+Bundled mod Android `https://localhost` veya iOS `capacitor://localhost` kökeninden
+HTTPS API kökenine çağrı yapar. `credentials: include` mevcut `SameSite=Strict`
+cookie'yi çapraz site kullanımına açmaz. Mevcut backend bu kökenlere CORS izni
+vermez, POST isteklerini CSRF sınırında reddeder. Bu merge backend CORS, CSP veya
+cookie korumalarını gevşetmez. Giriş, QR ve diğer kişisel API akışları bundled
+modda desteklenmiyor; staging/production build env ile bundled mod reddedilir.
+
+Paketleme testi yalnız dosya üretimini doğrular, çalışan oturum akışı değildir.
+Yerel bundle için meta CSP/connect-src tasarımı, güvenli native kimlik doğrulama
+ve yenileme/iptal mimarisi, WebView cookie politikası ve bağımsız güvenlik incelemesi
+henüz yapılmadı. CORS localhost kökenlerine topluca açılarak bu engel gizlenmemeli.
+Remote pilot aynı HTTPS kökeni ve mevcut HttpOnly/Secure/Strict cookie ile devam eder.
 
 1. **Pilot altyapısı (yerel testler başarılı; cihaz doğrulaması bekliyor):** `server.url` kabuğu, kamera izinleri, çevrimdışı/kurulum sayfaları.
    Cihazda deneme için Xcode ve Android Studio gerekir.
@@ -57,8 +89,14 @@ Bağlantı kesilince `www/offline.html` açılır.
    - Bu aşama Apple 4.2 "yalnızca web sitesi sarmalayıcı" reddi riskini azaltır.
 4. **Bildirimler (opsiyonel):** bugün bildirimler yalnızca uygulama açıkken sorgulanır.
    Push için `@capacitor/push-notifications` ve backend tarafında APNs/FCM gerekir.
+## Native ayarlar
 
-## Kalan gereksinimler
+- **iOS** `ios/App/App/Info.plist`: `NSCameraUsageDescription` var. Proje Swift Package Manager kullanır; CocoaPods gerekmez.
+- **Android** `AndroidManifest.xml`:
+  - `android.permission.CAMERA` izni var.
+  - `android.hardware.camera` isteğe bağlı (`required="false"`), kamerasız cihazlara da kurulabilir.
+  - Capacitor `BridgeWebChromeClient`, sayfadaki kamera isteğini çalışma anında izin sorusuna çevirir.
+- **Güvenlik:** `allowMixedContent: false`, `webContentsDebuggingEnabled: false`, `loggingBehavior: 'none'`.
 
 - **Sunucu (backend ekibi):**
   - HTTPS ve HSTS.
@@ -107,3 +145,21 @@ ve gerçek cihazda test edilmeden mağaza paketi hazır kabul edilmez.
 Capacitor `server.url` canlı yeniden yükleme/pilot kullanımına yöneliktir;
 [resmî yapılandırma belgesi](https://capacitorjs.com/docs/config) bu seçeneği üretim
 kullanımı için önermiyor. App Store/Play üretim mimarisi ve onayı hâlâ yayın kapısıdır.
+## Kalan eksikler
+
+- Gerçek cihazda test (iPhone Safari, Android Chrome, iki native kabuk):
+  - Kamera izni verildiğinde ve reddedildiğinde
+  - Fener
+  - QR kodunun süresinin dolması
+  - Çevrimdışı ekran
+  - Ana ekrana ekleme
+- APK ve IPA derlemesi: JDK, Android SDK ve tam Xcode gerekli.
+- Mağaza hazırlığı:
+  - Gerçek paket kimliği
+  - İkon ve açılış ekranı (kaynak: `public/v9/icons/`)
+  - İmzalama sertifikaları
+  - Gizlilik politikası
+  - App Store veri gizliliği ve Google Play veri güvenliği formları
+  - Uygulama içi hesap silme politikası
+- `bundled` mod için yukarıdaki backend işleri.
+- Push bildirimi yok. Bildirimler yalnızca uygulama açıkken sorgulanır.

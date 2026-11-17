@@ -1,5 +1,4 @@
 /* FORM CLUB V9 - mobile-first PWA shell. Same palette as V7/V8; self-contained so the app shell works offline. */
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap');
 :root{
   color-scheme:dark;
   --bg:#090e0b;--side:#101711;--card:#151e17;--card2:#19251c;--field:#101b12;

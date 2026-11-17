@@ -15,9 +15,10 @@ const dateLabel = (v, opts = { day:'numeric', month:'short' }) => { const d = C.
 const kpi = (label, value, foot) => `<article class="card kpi"><div class="label">${esc(label)}</div><div class="value">${esc(value)}</div><div class="foot">${esc(foot)}</div></article>`;
 const empty = text => `<div class="empty">${esc(text)}</div>`;
 async function api(path, options = {}) {
-  const init = { credentials:'same-origin', cache:'no-store', headers:{ 'Accept':'application/json' }, ...options };
+  const base = String(globalThis.FORMCLUB_CONFIG?.apiBase || '').replace(/\/+$/, '');
+  const init = { credentials: base ? 'include' : 'same-origin', cache:'no-store', headers:{ 'Accept':'application/json' }, ...options };
   if (options.body !== undefined) { init.headers['Content-Type'] = 'application/json'; init.body = JSON.stringify(options.body); }
-  const response = await fetch(path, init);
+  const response = await fetch(base + path, init);
   let json; try { json = await response.json(); } catch { throw Error(`API yanıtı okunamadı (${response.status})`); }
   if (!response.ok) throw Error(json.error || `Sunucu hatası (${response.status})`);
   return json;

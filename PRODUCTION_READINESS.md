@@ -167,3 +167,29 @@ Sonuç **78 PASS / 0 FAIL / 0 SKIP**. `git diff --check` temiz. Gerçek müşter
 verileri açılmadı/değiştirilmedi. Main merge, GitHub push ve canlı dağıtım yapılmadı.
 Staging ve mobil kullanım adımları: [deploy/STAGING.md](deploy/STAGING.md),
 [mobile/README.md](mobile/README.md).
+
+
+## 098b673 mobil dalı birleşimi — güncel durum
+
+Güvenlik tabanı `960f96b`, mobil kaynak `feature/mobile-v95` / `098b673`.
+Bu bölüm önceki 78 testlik sonucu günceller; önceki yayın engelleri kapanmadı.
+
+| Madde | Durum | Kanıt / sınır |
+|---|---|---|
+| Güvenlik başlıkları, cookie, CORS/CSRF | PASS | `backend/security.js` ve `server.js` bu birleşimde değiştirilmedi. HTTPS/Secure/HttpOnly/SameSite=Strict, CSP script-src/connect-src self ve kamera self korunur. Mevcut HTTP güvenlik ve staging akış testleri geçti. |
+| Remote mobil modu | PASS | V9.5 beklenen HTTPS kökeni ve staging .staging appId kontrolleri korundu; allowNavigation genişletilmedi, logging none. Web runtime apiBase boş: göreli API çağrıları aynı kökende. Cihaz/WebView doğrulaması hâlâ NOT TESTED. |
+| CSP modül yükleme | PASS | Inline handler yok; iframe load listener göstergeyi gizler, 15 sn gecikmede yeniden yükleme mesajı. VM davranış testi `mobile/test/merge-flows.test.js`. Gerçek CSP tarayıcı smoke testi henüz yapılmadı. |
+| QR yenileme ve erişim iptali | PASS | Geçici hatalarda 3/6/.../30 saniye geri deneme; 429 için 30 saniye, 401/403 otomatik retry yok. Başarılı yenilemede retryAt/retries sıfırlanır; stopQR timer temizler. VM + mevcut backend expiry/replay/authorization testleri. |
+| Kamera / fener | PASS | Fener track.applyConstraints ile çalışır; stopCamera stream track'lerini kapatır. Mock test; donanım desteği, gerçek izin ve fiziksel fener davranışı NOT TESTED. |
+| PWA runtime dosyası | PASS | Kök worker statik runtime-config dosyasını allowlist'e alır, API/query bypass ve cache güvenliği korunur. Native bundled kopyada worker dosyaları yok; ana uygulama ve V9 native modda worker kaydetmez. Web PWA kaydı korunur. |
+| Bundled paketleme | PASS | Yalnız public dosyaları, worker hariç; API kökeni yalnız paket kopyasına yazılır. Kaynak/üst dizin çıktısı gerçek yol üzerinden reddedilir; SQLite/gizli dosya kontrolü testlidir. Bu test çalışan giriş oturumu kanıtı değildir. |
+| Bundled giriş/QR ve yayın | FAIL | Android https://localhost / iOS capacitor://localhost farklı kökenden HTTPS API çağırır. credentials:include, SameSite=Strict'i aşamaz; mevcut backend CORS izni vermez ve CSRF kontrolü POST'u reddeder. CORS/cookie/CSP gevşetilmedi. Bundled yalnız deneysel development; staging/production config ve bundle komutu BLOKE. |
+| Bundled güvenli üretim tasarımı | NOT TESTED | Ayrı native kimlik doğrulama/yenileme/iptal, yerel sayfa CSP/connect-src, WebView üçüncü taraf cookie politikası, bağımsız güvenlik incelemesi ve mağaza onayı bekliyor. |
+
+Ana + mobil toplam sonuç: **88/88 PASS** (66 ana + 22 mobil), 0 FAIL/SKIP.
+Komut: `NODE_ENV=test FITNESS_DB_PATH=:memory: node --test test/*.test.js tests/*.test.js mobile/test/*.test.js`.
+`git diff --check` temiz. Gerçek müşteri DB'si açılmadı/değiştirilmedi; native sync,
+APK/IPA derlemesi, fiziksel kamera/PWA kabulü ve canlı HTTPS testi bu birleşimde
+çalıştırılmadı. Ana yayın engelleri: gerçek TLS/proxy/cihaz kabulü, native kimlik ve
+mağaza mimarisi, MFA/hesap yaşam döngüsü, KVKK, ödeme doğrulaması, yeni salon
+onboarding ve şifreli offsite yedek/alarmlar. Bundled mod yayına hazır değildir.

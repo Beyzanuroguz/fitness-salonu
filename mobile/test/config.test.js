@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const load = env => {
-  const keys = ['FORMCLUB_SERVER_URL', 'FORMCLUB_APP_ID', 'FORMCLUB_ALLOW_CLEARTEXT', 'FORMCLUB_BUILD_ENV', 'FORMCLUB_EXPECTED_ORIGIN'], saved = {};
+  const keys = ['FORMCLUB_SERVER_URL', 'FORMCLUB_APP_ID', 'FORMCLUB_ALLOW_CLEARTEXT', 'FORMCLUB_BUILD_ENV', 'FORMCLUB_EXPECTED_ORIGIN', 'FORMCLUB_MODE', 'FORMCLUB_API_URL'], saved = {};
   for (const k of keys) { saved[k] = process.env[k]; delete process.env[k]; }
   Object.assign(process.env, env);
   const file = require.resolve('../capacitor.config.js');
@@ -32,8 +32,25 @@ test('with a server URL the shell loads it over https only, with an offline page
   assert.throws(() => load({ FORMCLUB_SERVER_URL: 'http://club.example.com' }));
 });
 
+test('bundled mode serves build/web locally and requires an https API URL', () => {
+  const c = load({ FORMCLUB_MODE: 'bundled', FORMCLUB_API_URL: 'https://api.example.com' });
+  assert.equal(c.webDir, 'build/web');
+  assert.equal(c.server.url, undefined);
+  assert.equal(c.server.androidScheme, 'https');
+  assert.throws(() => load({ FORMCLUB_MODE: 'bundled' }));
+  assert.throws(() => load({ FORMCLUB_MODE: 'bundled', FORMCLUB_API_URL: 'http://api.example.com' }));
+  assert.throws(() => load({ FORMCLUB_MODE: 'other' }));
+});
+
 test('mobile package never bundles the backend or databases', () => {
   const walk = d => fs.readdirSync(d, { withFileTypes: true }).flatMap(e => e.name === 'node_modules' ? [] : e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]);
   const files = walk(path.join(__dirname, '..', 'www'));
   for (const f of files) assert.doesNotMatch(f, /server\.js$|\.sqlite|\.db$|backend/, f);
+});
+
+test('merge preserves remote staging security and blocks bundled staging/production',()=>{
+ const env={FORMCLUB_BUILD_ENV:'staging',FORMCLUB_SERVER_URL:'https://stage.example.com',FORMCLUB_EXPECTED_ORIGIN:'https://stage.example.com',FORMCLUB_APP_ID:'com.formclub.app.staging'};
+ const c=load(env);assert.equal(c.server.url,env.FORMCLUB_SERVER_URL);assert.equal(c.server.cleartext,false);assert.equal(c.server.allowNavigation,undefined);assert.equal(c.loggingBehavior,'none');
+ assert.throws(()=>load({...env,FORMCLUB_EXPECTED_ORIGIN:'https://wrong.example.com'}));
+ for(const mode of ['staging','production'])assert.throws(()=>load({...env,FORMCLUB_MODE:'bundled',FORMCLUB_BUILD_ENV:mode,FORMCLUB_API_URL:'https://stage.example.com'}),/experimental/);
 });
