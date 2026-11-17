@@ -78,3 +78,15 @@ test('Mifflin-St Jeor BMR and activity-based TDEE', () => {
   assert.deepEqual(C.tdee({ sex: 'male', weight: 80, height: 180, age: 30, activity: 'moderate' }), { bmr: 1780, factor: 1.55, tdee: 2759 });
   assert.equal(C.tdee({ sex: 'male', weight: 80, height: 180, age: 30, activity: '' }), null);
 });
+
+test('Open Food Facts products map onto the V6 catalogue without duplicates', () => {
+  const remote = { name: 'Yulaf ezmesi', kcal_100g: 372, protein_100g: 13.5, carbs_100g: 58.7, fat_100g: 7, remote: true };
+  const foods = [{ id: 9, name: 'yulaf EZMESİ', kcal_100g: 372, protein_100g: 13.5, carbs_100g: 58.7, fat_100g: 7 }];
+  assert.equal(C.findCatalogMatch(foods, remote)?.id, 9);
+  assert.equal(C.findCatalogMatch(foods, { ...remote, fat_100g: 7.1 }), null);
+  assert.equal(C.findCatalogMatch([], remote), null);
+  assert.equal(C.catalogName({ name: '  ' + 'a'.repeat(150) }).length, 100);
+  // Selecting a product shows values for the default 100 g, then scales with grams.
+  assert.deepEqual(C.nutrientsFor(remote, 100), { grams: 100, kcal: 372, protein: 13.5, carbs: 58.7, fat: 7 });
+  assert.deepEqual(C.nutrientsFor(remote, 40), { grams: 40, kcal: 149, protein: 5.4, carbs: 23.5, fat: 2.8 });
+});

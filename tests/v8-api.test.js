@@ -13,6 +13,7 @@ test.before(async () => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'formclub-v8-'));
   fs.copyFileSync(path.join(repo, 'server.js'), path.join(dir, 'server.js'));
   fs.cpSync(path.join(repo, 'public'), path.join(dir, 'public'), { recursive: true });
+  fs.cpSync(path.join(repo, 'backend'), path.join(dir, 'backend'), { recursive: true });
   const port = 3900 + Math.floor(Math.random() * 500);
   base = `http://127.0.0.1:${port}`;
   proc = spawn(process.execPath, ['server.js'], { cwd: dir, env: { ...process.env, PORT: String(port) }, stdio: 'ignore' });
@@ -63,4 +64,18 @@ test('food catalogue, diary and delete flow matches V8 usage', async () => {
   assert.equal((await member(`/api/v6/food-logs/${log.json.id}`, 'DELETE')).status, 200);
   assert.equal((await member('/api/v6/food-logs')).json.length, 1);
   assert.equal((await member('/api/v6/food-logs', 'POST', { product_id: created.json.id, grams: 0, consumed_on: '2026-11-16' })).status, 400);
+});
+
+test('V8 food search endpoint is reachable and validates the query before any network call', async () => {
+  const anon = client();
+  assert.equal((await anon('/api/v8/foods/search?q=yulaf')).status, 401);
+  const admin = client();
+  assert.equal((await admin('/api/login', 'POST', { username: 'admin', password: 'admin-pass-123' })).status, 200);
+  const short = await admin('/api/v8/foods/search?q=a');
+  assert.equal(short.status, 400);
+  assert.match(short.json.error, /2-100/);
+  // A product chosen from search is logged through the V6 catalogue with its per-100 g values.
+  const name = 'x'.repeat(100);
+  const created = await admin('/api/v6/foods', 'POST', { name, kcal_100g: 372, protein_100g: 13.5, carbs_100g: 58.7, fat_100g: 7 });
+  assert.equal(created.status, 200);
 });

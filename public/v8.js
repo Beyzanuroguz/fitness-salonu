@@ -1,11 +1,13 @@
 /* FORM CLUB V8 — nutrition diary, food search, calorie analytics, BMI and energy estimate.
-   Uses only the existing V6 endpoints: /api/v6/foods and /api/v6/food-logs. No sample food values are shipped. */
+   Diary and catalogue use the V6 endpoints (/api/v6/foods, /api/v6/food-logs) so admins keep member diaries.
+   Food search also calls the V8 backend (/api/v8/foods/search, Open Food Facts); a chosen product is stored in
+   the V6 catalogue with its per-100 g label values before logging. No sample food values are shipped. */
 (() => {
 'use strict';
 const C = window.V8Calc;
 const root = document.getElementById('v8-root');
 const today = () => C.localISO(new Date());
-let current = { user:null, role:'', state:null, foods:[], logs:[], memberId:null, view:'diary', day:today(), week:C.weekStart(today()), month:C.monthStart(today()), query:'', selected:null, mode:'gram', profile:{ sex:'', age:'', height:'', weight:'', activity:'' }, error:'' };
+let current = { user:null, role:'', state:null, foods:[], logs:[], memberId:null, view:'diary', day:today(), week:C.weekStart(today()), month:C.monthStart(today()), query:'', selected:null, mode:'gram', portion:{}, remote:{ q:'', loading:false, error:'', products:[], attribution:'' }, profile:{ sex:'', age:'', height:'', weight:'', activity:'' }, error:'' };
 const esc = v => String(v ?? '').replace(/[&<>"']/g, x => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[x]));
 const int = v => Math.round(Number(v || 0)).toLocaleString('tr-TR');
 const dec = v => Number(v || 0).toLocaleString('tr-TR', { maximumFractionDigits:1 });
@@ -60,7 +62,7 @@ function render() {
   const links = pages();
   if (!links.some(x => x[0] === current.view)) current.view = links[0][0];
   const focus = document.activeElement?.id, caret = document.activeElement?.selectionStart;
-  root.innerHTML = `<div class="shell"><aside class="side"><div class="brand">FORM <strong>CLUB</strong><span style="font-size:10px;vertical-align:top;margin-left:6px;color:#829879">V8</span></div><div class="tag">BESLENME · SAĞLIK</div><nav class="nav" aria-label="V8 sayfaları">${links.map(([id, name]) => `<a href="#${id}" class="navlink ${current.view === id ? 'active' : ''}" data-view="${id}" ${current.view === id ? 'aria-current="page"' : ''}>${esc(name)}</a>`).join('')}<a href="/v7.html" class="navlink">V7 panel</a></nav><div class="side-bottom">● V6 beslenme API'si<br>Besin değerleri salon kataloğundan<br>Hesap: ${esc(current.user.username || current.role)}</div></aside><main class="main"><header class="head"><div><div class="eyebrow">FITNESS · BESLENME · SAĞLIK</div><h1>${esc(titles[current.view])}</h1><div class="subtitle">${new Date().toLocaleDateString('tr-TR', { weekday:'long', day:'numeric', month:'long', year:'numeric' })}</div></div><div class="actions">${memberPicker()}<a href="/" class="btn">← Ana uygulama</a><button class="btn primary" id="reload">↻ Yenile</button></div></header>${current.error ? `<div class="notice" role="alert">${esc(current.error)}</div>` : ''}${body()}</main></div>`;
+  root.innerHTML = `<div class="shell"><aside class="side"><div class="brand">FORM <strong>CLUB</strong><span style="font-size:10px;vertical-align:top;margin-left:6px;color:#829879">V8</span></div><div class="tag">BESLENME · SAĞLIK</div><nav class="nav" aria-label="V8 sayfaları">${links.map(([id, name]) => `<a href="#${id}" class="navlink ${current.view === id ? 'active' : ''}" data-view="${id}" ${current.view === id ? 'aria-current="page"' : ''}>${esc(name)}</a>`).join('')}<a href="/v7.html" class="navlink">V7 panel</a></nav><div class="side-bottom">● V6 beslenme API'si<br>Besin değerleri salon kataloğu ve Open Food Facts'ten<br>Hesap: ${esc(current.user.username || current.role)}</div></aside><main class="main"><header class="head"><div><div class="eyebrow">FITNESS · BESLENME · SAĞLIK</div><h1>${esc(titles[current.view])}</h1><div class="subtitle">${new Date().toLocaleDateString('tr-TR', { weekday:'long', day:'numeric', month:'long', year:'numeric' })}</div></div><div class="actions">${memberPicker()}<a href="/" class="btn">← Ana uygulama</a><button class="btn primary" id="reload">↻ Yenile</button></div></header>${current.error ? `<div class="notice" role="alert">${esc(current.error)}</div>` : ''}${body()}</main></div>`;
   current.error = '';
   if (focus) { const el = document.getElementById(focus); if (el) { el.focus(); if (caret != null && el.setSelectionRange) try { el.setSelectionRange(caret, caret); } catch {} } }
 }
@@ -90,13 +92,23 @@ function diaryView() {
 
 /* ---------- Besin seç ---------- */
 function addView() {
-  const results = C.searchFoods(current.foods, current.query);
-  return `<div class="grid two"><section class="card"><div class="cardtop"><h2>Katalog</h2><span class="pill">${int(current.foods.length)} ürün</span></div><div class="search"><label class="screen-reader" for="foodsearch">Besin ara</label><input id="foodsearch" type="search" autocomplete="off" placeholder="Besin veya ürün ara…" value="${esc(current.query)}"></div><div class="food-list" id="foodresults">${foodResults(results)}</div></section><section class="card">${current.selected ? portionPanel() : `<h2>Porsiyon hesapla</h2>${empty('Kalori hesaplamak için soldan bir ürün seç.')}`}</section></div>${newFoodForm()}`;
+  return `<div class="grid two add-grid"><section class="card"><div class="cardtop"><h2>Besin ara</h2><span class="pill">${int(current.foods.length)} katalog ürünü</span></div><form class="search" id="searchform" role="search"><label class="screen-reader" for="foodsearch">Besin ara</label><input id="foodsearch" type="search" enterkeyhint="search" autocomplete="off" placeholder="Besin veya ürün ara…" value="${esc(current.query)}"></form><div class="food-list" id="foodresults">${foodResults()}</div></section><section class="card" id="portionpanel">${current.selected ? portionPanel() : `<h2>Porsiyon hesapla</h2>${empty('Kalori hesaplamak için bir ürün seç.')}`}</section></div>${newFoodForm()}`;
 }
-function foodResults(results) {
-  if (!current.foods.length) return empty('Katalogda henüz ürün yok. Aşağıdan ambalaj etiketindeki değerlerle ürün ekleyebilirsin.');
-  if (!results.length) return empty(`"${current.query}" için sonuç yok.`);
-  return results.slice(0, 100).map(f => `<button class="food-item" data-food="${f.id}" aria-pressed="${current.selected?.id === f.id}"><span><b>${esc(f.name)}</b><span class="macro">100 g · P ${dec(f.protein_100g)} · K ${dec(f.carbs_100g)} · Y ${dec(f.fat_100g)}</span></span><span class="kcal">${dec(f.kcal_100g)} kcal</span></button>`).join('');
+const foodButton = (attr, f, pressed, badge) => `<button type="button" class="food-item" ${attr} aria-pressed="${pressed}"><span><b>${esc(f.name)}</b>${badge ? `<span class="src">${esc(badge)}</span>` : ''}<span class="macro">100 g · P ${dec(f.protein_100g)} · K ${dec(f.carbs_100g)} · Y ${dec(f.fat_100g)}</span></span><span class="kcal">${dec(f.kcal_100g)} kcal</span></button>`;
+function foodResults() {
+  const q = current.query.trim(), local = C.searchFoods(current.foods, q).slice(0, 100), sel = current.selected;
+  const localHtml = local.length
+    ? local.map(f => foodButton(`data-food="${f.id}"`, f, !!sel && !sel.remote && sel.id === f.id)).join('')
+    : empty(current.foods.length ? `Katalogda "${q}" için sonuç yok.` : 'Katalogda henüz ürün yok.');
+  const r = current.remote;
+  let remoteHtml;
+  if (q.length < 2) remoteHtml = empty('Open Food Facts veritabanında aramak için en az 2 karakter yaz.');
+  else if (q.length > 100) remoteHtml = empty('Arama en fazla 100 karakter olabilir.');
+  else if (r.loading || r.q !== q) remoteHtml = `<div class="empty" role="status">"${esc(q)}" aranıyor…</div>`;
+  else if (r.error) remoteHtml = `<div class="empty error-box" role="alert">${esc(r.error)} <button type="button" class="btn small" data-retry>Tekrar dene</button></div>`;
+  else if (!r.products.length) remoteHtml = empty(`"${q}" için 100 g besin değeri olan ürün bulunamadı.`);
+  else remoteHtml = r.products.map(p => foodButton(`data-remote="${esc(p.source_id)}"`, p, !!sel && sel.remote && sel.source_id === p.source_id, 'Open Food Facts')).join('') + `<p class="footnote">${esc(r.attribution || 'Open Food Facts — ODbL-1.0')}</p>`;
+  return `<h3 class="list-head">Salon kataloğu</h3>${localHtml}<h3 class="list-head">Open Food Facts</h3>${remoteHtml}`;
 }
 function currentGrams() {
   const p = current.portion || {};
@@ -109,7 +121,8 @@ function calcOut() {
 }
 function portionPanel() {
   const f = current.selected, p = current.portion || {};
-  return `<h2>${esc(f.name)}</h2><p class="footnote">100 g: ${dec(f.kcal_100g)} kcal · protein ${dec(f.protein_100g)} g · karbonhidrat ${dec(f.carbs_100g)} g · yağ ${dec(f.fat_100g)} g</p><div class="seg" role="group" aria-label="Miktar türü"><button data-mode="gram" aria-pressed="${current.mode === 'gram'}">Gram</button><button data-mode="portion" aria-pressed="${current.mode === 'portion'}">Porsiyon</button></div>
+  const source = f.remote ? `<p class="footnote">Kaynak: <a href="${esc(f.source_url)}" target="_blank" rel="noopener noreferrer">Open Food Facts</a> (${esc(f.source_license || 'ODbL-1.0')}). Eklediğinde bu değerlerle salon kataloğuna kaydedilir.</p>` : '';
+  return `<h2>${esc(f.name)}</h2><p class="footnote">100 g: ${dec(f.kcal_100g)} kcal · protein ${dec(f.protein_100g)} g · karbonhidrat ${dec(f.carbs_100g)} g · yağ ${dec(f.fat_100g)} g</p>${source}<div class="seg" role="group" aria-label="Miktar türü"><button type="button" data-mode="gram" aria-pressed="${current.mode === 'gram'}">Gram</button><button type="button" data-mode="portion" aria-pressed="${current.mode === 'portion'}">Porsiyon</button></div>
   ${current.mode === 'gram'
     ? `<div class="form-row"><label class="field">Miktar (g)<input id="p-grams" type="number" inputmode="decimal" min="0.1" max="5000" step="0.1" value="${esc(p.grams ?? '')}"></label></div>`
     : `<div class="form-row"><label class="field">Porsiyon sayısı<input id="p-count" type="number" inputmode="decimal" min="0.25" max="50" step="0.25" value="${esc(p.count ?? '')}"></label><label class="field">1 porsiyon (g)<input id="p-size" type="number" inputmode="decimal" min="1" max="5000" step="0.1" value="${esc(p.size ?? '')}"><small>Ambalajdaki porsiyon gramajı</small></label></div>`}
@@ -167,27 +180,70 @@ function updateHealth() {
 }
 
 /* ---------- Events ---------- */
+// Open Food Facts products have no V6 id yet: reuse a matching catalogue row or create one with the label values.
+async function catalogId(food) {
+  if (!food.remote) return food.id;
+  const existing = C.findCatalogMatch(current.foods, food);
+  if (existing) return existing.id;
+  const r = await api('/api/v6/foods', { method:'POST', body:{ name:C.catalogName(food), kcal_100g:food.kcal_100g, protein_100g:food.protein_100g, carbs_100g:food.carbs_100g, fat_100g:food.fat_100g } });
+  current.foods = await api('/api/v6/foods');
+  return r.id;
+}
+let searchTimer = 0, searchSeq = 0;
+async function remoteSearch(q) {
+  clearTimeout(searchTimer);
+  const seq = ++searchSeq;
+  current.remote = { q, loading:true, error:'', products:[], attribution:'' };
+  refreshResults();
+  try {
+    const r = await api('/api/v8/foods/search?q=' + encodeURIComponent(q));
+    if (seq !== searchSeq) return;
+    current.remote = { q, loading:false, error:'', products:(Array.isArray(r.products) ? r.products : []).map(p => ({ ...p, remote:true })), attribution:r.attribution || '' };
+  } catch (e) {
+    if (seq !== searchSeq) return;
+    current.remote = { q, loading:false, error:e instanceof TypeError ? 'Sunucuya bağlanılamadı. İnternet bağlantını kontrol et.' : e.message, products:[], attribution:'' };
+  }
+  refreshResults();
+}
+function scheduleSearch() {
+  clearTimeout(searchTimer);
+  const q = current.query.trim();
+  if (q.length < 2 || q.length > 100) { searchSeq++; current.remote = { q:'', loading:false, error:'', products:[], attribution:'' }; return refreshResults(); }
+  if (q === current.remote.q && !current.remote.error) return refreshResults();
+  refreshResults();
+  searchTimer = setTimeout(() => remoteSearch(q), 450);
+}
+function refreshResults() { const box = document.getElementById('foodresults'); if (box) box.innerHTML = foodResults(); }
+function selectFood(food) {
+  current.selected = food; current.portion = { grams:'100', count:'1', size:'' };
+  render();
+  if (window.matchMedia('(max-width:1080px)').matches) document.getElementById('portionpanel')?.scrollIntoView({ behavior:'smooth', block:'start' });
+}
 async function addLog() {
   const grams = currentGrams(), date = document.getElementById('p-date')?.value;
   if (!grams || grams > 5000) return toast('Geçerli bir miktar gir (en fazla 5000 g).');
   if (!date) return toast('Tarih seç.');
+  const btn = document.getElementById('addlog'); if (btn) btn.disabled = true;
   try {
-    const body = { product_id:current.selected.id, grams, consumed_on:date };
+    const body = { product_id:await catalogId(current.selected), grams, consumed_on:date };
     if (current.role === 'admin') body.member_id = current.memberId;
     await api('/api/v6/food-logs', { method:'POST', body });
     await loadLogs();
     current.day = date; current.view = 'diary'; current.portion = {};
     render();
   } catch (e) { toast(e.message); }
+  finally { const b = document.getElementById('addlog'); if (b) b.disabled = false; }
 }
 root.addEventListener('click', async ev => {
-  const t = ev.target.closest('[data-view],[data-day],[data-week],[data-month],[data-food],[data-mode],[data-del],#reload,#addlog');
+  const t = ev.target.closest('[data-view],[data-day],[data-week],[data-month],[data-food],[data-remote],[data-retry],[data-mode],[data-del],#reload,#addlog');
   if (!t || t.disabled) return;
   if (t.dataset.view) { ev.preventDefault(); current.view = t.dataset.view; return render(); }
   if (t.dataset.day) { current.day = t.dataset.day === 'today' ? today() : C.addDays(current.day, Number(t.dataset.day)); if (current.day > today()) current.day = today(); return render(); }
   if (t.dataset.week) { current.week = t.dataset.week === '0' ? C.weekStart(today()) : C.addDays(current.week, 7 * Number(t.dataset.week)); return render(); }
   if (t.dataset.month) { current.month = t.dataset.month === '0' ? C.monthStart(today()) : C.shiftMonth(current.month, Number(t.dataset.month)); return render(); }
-  if (t.dataset.food) { current.selected = current.foods.find(f => String(f.id) === t.dataset.food) || null; current.portion = {}; return render(); }
+  if (t.dataset.food) return selectFood(current.foods.find(f => String(f.id) === t.dataset.food) || null);
+  if (t.dataset.remote) return selectFood(current.remote.products.find(p => p.source_id === t.dataset.remote) || null);
+  if (t.hasAttribute('data-retry')) return remoteSearch(current.query.trim());
   if (t.dataset.mode) { current.mode = t.dataset.mode; return render(); }
   if (t.dataset.del) {
     if (!confirm('Bu beslenme kaydı silinsin mi?')) return;
@@ -199,7 +255,7 @@ root.addEventListener('click', async ev => {
 });
 root.addEventListener('input', ev => {
   const t = ev.target;
-  if (t.id === 'foodsearch') { current.query = t.value; const box = document.getElementById('foodresults'); if (box) box.innerHTML = foodResults(C.searchFoods(current.foods, current.query)); return; }
+  if (t.id === 'foodsearch') { current.query = t.value; return scheduleSearch(); }
   if (['p-grams', 'p-count', 'p-size'].includes(t.id)) { current.portion = { ...current.portion, [t.id.slice(2)]:t.value }; const out = document.getElementById('calcout'); if (out) out.outerHTML = calcOut(); return; }
   if (t.form?.id === 'healthform') { current.profile[t.name] = t.value; if (t.name === 'weight') current.profile.weightSource = ''; updateHealth(); }
 });
@@ -210,14 +266,21 @@ root.addEventListener('change', async ev => {
   if (t.id === 'memberpick') { current.memberId = Number(t.value); try { await loadLogs(); prefillWeight(); render(); } catch (e) { toast(e.message); } }
 });
 root.addEventListener('submit', async ev => {
+  if (ev.target.id === 'searchform') {
+    ev.preventDefault();
+    const q = current.query.trim();
+    if (q.length >= 2 && q.length <= 100) remoteSearch(q);
+    document.getElementById('foodsearch')?.blur();
+    return;
+  }
   if (ev.target.id !== 'foodform') return;
   ev.preventDefault();
   const d = Object.fromEntries(new FormData(ev.target));
   try {
     const r = await api('/api/v6/foods', { method:'POST', body:{ name:d.name, kcal_100g:Number(d.kcal_100g), protein_100g:Number(d.protein_100g), carbs_100g:Number(d.carbs_100g), fat_100g:Number(d.fat_100g) } });
     current.foods = await api('/api/v6/foods');
-    current.selected = current.foods.find(f => f.id === r.id) || null; current.portion = {}; current.query = '';
-    render();
+    current.query = ''; current.remote = { q:'', loading:false, error:'', products:[], attribution:'' };
+    selectFood(current.foods.find(f => f.id === r.id) || null);
   } catch (e) { toast(e.message); }
 });
 init();

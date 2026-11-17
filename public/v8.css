@@ -49,4 +49,42 @@ details.datatable summary{cursor:pointer;color:#b1c5b4;font-size:12px;font-weigh
 .progress{height:10px;background:#304335;border-radius:9px;overflow:hidden;margin:10px 0 6px}
 .progress>i{display:block;height:100%;background:#d4ff4b}
 .progress.over>i{background:#ffb35c}
-@media(max-width:700px){.calc-out{grid-template-columns:repeat(2,minmax(0,1fr))}.big{font-size:38px}.food-list{max-height:none}.search input{font-size:16px}}
+/* Search results: catalogue + Open Food Facts sections */
+.list-head{margin:6px 0 2px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#90a48e}
+.food-item .src{display:inline-block;margin:3px 0 2px;font-size:10px;font-weight:800;color:#a9e6f7}
+.food-item .macro{display:block}
+.error-box{color:#ffd68a}
+.error-box .btn{margin-left:6px}
+#portionpanel{scroll-margin-top:12px}
+#portionpanel a{color:#d4ff4b}
+@media(max-width:1080px){.food-list{max-height:none;overflow:visible;padding-right:0}}
+@media(max-width:700px){
+  html,body{overflow-x:hidden}
+  .calc-out{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+  .calc-out div{padding:10px 6px}
+  .calc-out b{font-size:19px}
+  .calc-out span{font-size:10px}
+  .calc-out .hero{grid-column:1/-1}
+  .big{font-size:38px}
+  .head{gap:12px;margin-bottom:18px}
+  .head .actions{width:100%}
+  .head .actions .btn,.head .actions .range{flex:1 1 auto;text-align:center;min-height:44px}
+  .search input,.field input,.field select,.daynav input{font-size:16px}
+  .food-item{padding:12px;min-height:56px}
+  .food-item .kcal{font-size:15px}
+  .seg{display:flex}
+  .seg button{flex:1;min-height:44px}
+  .btn{min-height:44px}
+  .btn.small{min-height:40px;padding:8px 12px}
+  #addlog{width:100%}
+  .daynav{width:100%}
+  .daynav input{flex:1;min-width:0}
+  .log-row{flex-wrap:wrap;gap:8px 12px}
+  .log-row>div{flex:1 1 100%}
+  .log-row .kcal{margin-right:auto}
+  .cardtop .actions{width:100%;justify-content:space-between}
+  .form-row{gap:10px}
+  #foodform .form-row .field:first-child{grid-column:1/-1}
+  .bmi-ticks{font-size:9px}
+}
+@media(max-width:380px){.calc-out b{font-size:18px}}
