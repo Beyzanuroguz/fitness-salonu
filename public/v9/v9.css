@@ -237,3 +237,5 @@ details summary{cursor:pointer;color:#b1c5b4;font-size:13px;font-weight:700;min-
 /* Embedded inside the main app: no V9 tab bar, so no reserved space for it. */
 .embedded .shell{padding-bottom:0}
 .embedded .toast{bottom:calc(16px + var(--safe-b))}
+/* Mobile QA: small buttons keep a 44px touch target on phones. */
+@media (max-width:680px){.btn.small{min-height:44px;min-width:44px}}
