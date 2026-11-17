@@ -257,8 +257,15 @@ const server=http.createServer(async(req,res)=>{try{
   if(url.pathname.startsWith('/api/v8/')) return send(res,200,await nutrition(req.method,url.pathname,req.method==='GET'?Object.fromEntries(url.searchParams):body,u));
   return send(res,200,api(req.method,url.pathname,req.method==='GET'?{...body,member_id:url.searchParams.get('member_id')}:body,u));
  }
- const file=path.resolve(ROOT,'public',url.pathname==='/'?'index.html':'.'+decodeURIComponent(url.pathname));
- if(!file.startsWith(path.join(ROOT,'public')+path.sep)){res.writeHead(403);return res.end('Yasak')}
+ const publicRoot=fs.realpathSync(path.join(ROOT,'public'));
+ const decoded=decodeURIComponent(url.pathname);
+ let file=path.resolve(publicRoot,'.'+decoded);
+ const inside=p=>p===publicRoot||p.startsWith(publicRoot+path.sep);
+ if(!inside(file)){res.writeHead(403);return res.end('Yasak')}
+ // Resolve directory entry points as well as explicit HTML paths.
+ if(fs.statSync(file).isDirectory())file=path.join(file,'index.html');
+ file=fs.realpathSync(file);
+ if(!inside(file)){res.writeHead(403);return res.end('Yasak')}
  const stat=fs.statSync(file);if(!stat.isFile())throw Error('Bulunamadı');res.writeHead(200,{'Content-Type':mime[path.extname(file)]||'application/octet-stream'});fs.createReadStream(file).pipe(res);
  }catch(e){if(req.url.startsWith('/api/'))send(res,e.status||400,{error:e.message});else{res.writeHead(404);res.end('Bulunamadı')}}});
 module.exports = { server, db };
