@@ -265,3 +265,5 @@ legend{font-size:13px;color:var(--ink2);font-weight:700;margin-bottom:6px;paddin
   .toast{bottom:24px;left:calc(50% + var(--rail-w) / 2)}
 }
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+/* Mobile QA: small buttons keep a 44px touch target on phones. */
+@media (max-width:680px){.btn.small{min-height:44px}}

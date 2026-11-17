@@ -55,3 +55,6 @@ a:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible,
  .v6-bar-row{grid-template-columns:58px 1fr 84px;gap:8px;font-size:12px}
 }
 @media(prefers-reduced-motion:reduce){.spinner{animation-duration:2.4s}.toast{transition:none}.panel{transition:none}}
+/* Mobile QA: the hidden attribute must win over component display rules (e.g. .btn on #install-app). */
+[hidden]{display:none!important}
+@media(max-width:680px){.chip{min-height:44px}.v6-form input[type=checkbox],.v6-form input[type=radio]{width:22px;height:22px}}
