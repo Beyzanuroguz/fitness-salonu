@@ -2,7 +2,7 @@
    - App shell is precached; pages are network-first with an offline fallback.
    - Static V9 files use stale-while-revalidate.
    - /api/ requests are never cached: QR tokens, notifications and reports are personal and short-lived. */
-const VERSION = 'v9.0.2';
+const VERSION = 'v9.0.4';
 const PREFIX = 'formclub-v9-';
 const SHELL = PREFIX + 'shell-' + VERSION;
 const RUNTIME = PREFIX + 'runtime-' + VERSION;
@@ -52,7 +52,7 @@ self.addEventListener('fetch', event => {
         if (response.ok) return response;
         throw Error('HTTP ' + response.status);
       } catch {
-        return (await caches.match('/v9/index.html')) || new Response('<h1>Çevrimdışı</h1><p>FORM CLUB V9 açılamadı.</p>', { status: 503, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+        return (await caches.match('/v9/index.html')) || new Response('<h1>Çevrimdışı</h1><p>FORM CLUB açılamadı.</p>', { status: 503, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
       }
     })());
     return;

@@ -56,7 +56,7 @@ async function api(path, options = {}) {
   if (!response.ok) throw Object.assign(Error(json?.error || `Sunucu hatası (${response.status})`), { status: response.status });
   return json;
 }
-const missingApiText = 'Bu özellik için V9 API sunucuda henüz etkin değil. Backend güncellemesi yayımlandığında otomatik çalışır.';
+const missingApiText = 'Bu özellik şu anda kullanılamıyor. Daha sonra tekrar deneyin veya yöneticiyle iletişime geçin.';
 
 /* ---------- State ---------- */
 const S = {
@@ -109,10 +109,10 @@ async function init() {
 }
 const trainers = () => Array.isArray(S.state?.trainers) ? S.state.trainers : [];
 function renderLoggedOut() {
-  root.innerHTML = `<main class="main"><div class="brand">FORM <strong>CLUB</strong><sup>V9</sup></div><section class="card" style="margin-top:24px"><h2>Giriş gerekli</h2><p class="muted">V9 ekranlarını kullanmak için önce FORM CLUB hesabınla giriş yap.</p><a class="btn primary block" href="/" target="_top">Giriş yap</a></section></main>`;
+  root.innerHTML = `<main class="main"><div class="brand">FORM <strong>CLUB</strong></div><section class="card" style="margin-top:24px"><h2>Giriş gerekli</h2><p class="muted">Bu ekranları kullanmak için önce FORM CLUB hesabınla giriş yap.</p><a class="btn primary block" href="/" target="_top">Giriş yap</a></section></main>`;
 }
 function renderFatal(message) {
-  root.innerHTML = `<main class="main"><div class="brand">FORM <strong>CLUB</strong><sup>V9</sup></div><div class="notice bad" style="margin-top:24px" role="alert"><div class="grow"><b>V9 açılamadı</b><br>${esc(message)}</div></div><button class="btn" id="retry-boot">${icon('refresh')} Tekrar dene</button></main>`;
+  root.innerHTML = `<main class="main"><div class="brand">FORM <strong>CLUB</strong></div><div class="notice bad" style="margin-top:24px" role="alert"><div class="grow"><b>Ekran açılamadı</b><br>${esc(message)}</div></div><button class="btn" id="retry-boot">${icon('refresh')} Tekrar dene</button></main>`;
 }
 
 /* ---------- Routing / render ---------- */
@@ -141,9 +141,9 @@ function render() {
   const unread = K.unreadCount(S.notes);
   const canInstall = !isStandalone() && !S.install.installed && (S.install.prompt || isIOS());
   root.innerHTML = `<div class="shell">
-  <aside class="side" aria-label="V9 menü"><div class="brand">FORM <strong>CLUB</strong><sup>V9</sup></div><nav>${navItems('navlink')}</nav>
-    <div class="side-bottom"><a href="/v8.html">V8 beslenme</a><a href="/v7.html">V7 panel</a><a href="/">Ana uygulama</a><span class="footnote" style="padding:8px 12px">${esc(S.user.username || '')} · ${esc(roleName())}</span></div></aside>
-  <header class="topbar"><div class="brand">FORM <strong>CLUB</strong><sup>V9</sup></div><span class="spacer"></span>
+  <aside class="side" aria-label="Modül menüsü"><div class="brand">FORM <strong>CLUB</strong></div><nav>${navItems('navlink')}</nav>
+    <div class="side-bottom"><a href="/v8.html">Beslenme ve sağlık</a><a href="/v7.html">Salon paneli</a><a href="/">Ana uygulama</a><span class="footnote" style="padding:8px 12px">${esc(S.user.username || '')} · ${esc(roleName())}</span></div></aside>
+  <header class="topbar"><div class="brand">FORM <strong>CLUB</strong></div><span class="spacer"></span>
     ${S.online ? '' : `<span class="pill" style="background:var(--warn-bg);color:var(--warn)"><span class="offline-dot"></span>Çevrimdışı</span>`}
     ${canInstall ? `<button class="iconbtn" id="install-top" aria-label="Uygulamayı yükle">${icon('download')}<span class="mobile-hide">Yükle</span></button>` : ''}
     <a class="iconbtn" href="#notifications" data-go="notifications" aria-label="Bildirimler${unread ? `, ${unread} okunmamış` : ''}">${icon('bell')}${unread ? `<span class="badge">${unread > 99 ? '99+' : unread}</span>` : ''}</a>
@@ -154,7 +154,7 @@ function render() {
     <header class="head"><div class="eyebrow">${esc(eyebrow)}</div><h1>${esc(title)}</h1><div class="subtitle">${esc(new Date().toLocaleDateString('tr-TR', { weekday: 'long', day: 'numeric', month: 'long' }))}</div></header>
     ${body()}
   </main>
-  <nav class="tabbar" aria-label="V9 sekmeler">${navItems('tab')}</nav>
+  <nav class="tabbar" aria-label="Modül sekmeleri">${navItems('tab')}</nav>
 </div>`;
   afterRender();
 }
@@ -427,7 +427,7 @@ async function submitToken(raw) {
     const at = r.checked_in_at ? new Date(r.checked_in_at) : new Date();
     showResult({ ok: true, title: r.member || 'Giriş onaylandı', detail: `Giriş onaylandı · ${at.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}` });
   } catch (e) {
-    showResult({ ok: false, title: K.isMissingApi(e) ? 'V9 API etkin değil' : 'Giriş reddedildi', detail: K.isMissingApi(e) ? missingApiText : K.scanErrorText(e) });
+    showResult({ ok: false, title: K.isMissingApi(e) ? 'Giriş hizmeti kullanılamıyor' : 'Giriş reddedildi', detail: K.isMissingApi(e) ? missingApiText : K.scanErrorText(e) });
   }
 }
 function showResult(result) {
@@ -609,7 +609,7 @@ function moreView() {
   else if (isIOS()) install = `<p class="muted" style="margin-top:0">iPhone / iPad'de Safari ile:</p><ol class="ios-steps"><li>Alttaki ${icon('share').replace('<svg', '<svg style="width:15px;height:15px;vertical-align:-2px"')} <b>Paylaş</b> düğmesine dokun.</li><li><b>Ana Ekrana Ekle</b>'yi seç.</li><li>Sağ üstte <b>Ekle</b>'ye dokun.</li></ol>`;
   else install = '<p class="muted" style="margin:0">Tarayıcının menüsünden “Uygulamayı yükle” veya “Ana ekrana ekle” seçeneğini kullan. Seçenek görünmüyorsa sayfayı HTTPS üzerinden aç.</p>';
   return `<div class="grid two"><section class="card"><h2>Uygulama</h2>${install}</section>
-  <section class="card"><h2>Diğer ekranlar</h2><div class="links"><a href="/v8.html">V8 beslenme ve sağlık <span>→</span></a><a href="/v7.html">V7 panel <span>→</span></a><a href="/">Ana uygulama <span>→</span></a></div></section>
+  <section class="card"><h2>Diğer ekranlar</h2><div class="links"><a href="/v8.html">Beslenme ve sağlık <span>→</span></a><a href="/v7.html">Salon paneli <span>→</span></a><a href="/">Ana uygulama <span>→</span></a></div></section>
   <section class="card"><h2>Hesap</h2><p class="muted" style="margin-top:0">${esc(S.user.username || '')} · ${esc(roleName())}</p><button class="btn" id="logout">Çıkış yap</button></section></div>`;
 }
 

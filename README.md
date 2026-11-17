@@ -847,3 +847,17 @@ HTTP testleri geçici yerel port, V8 süreç testi geçici dizinde SQLite kullan
 
 V9.5 bağımsız sentetik staging kurulumu ve mobil HTTPS yapılandırması:
 [deploy/STAGING.md](deploy/STAGING.md).
+
+## Nutrition+ (V9.5 devamı)
+
+Ana uygulamanın Beslenme sekmesi artık kişisel Nutrition+ ekranını açar. Mevcut V8 ekranına bu ekrandaki bağlantıyla erişilir. Open Food Facts arama/barkod, gram-porsiyon, öğün günlüğü, dönem grafikleri, favori/son tüketilen ve tarifler için API sözleşmeleri, 96 testin sonucu, gerçek API doğrulaması ve kalan sınırlar: [NUTRITION_PLUS.md](NUTRITION_PLUS.md).
+
+Nutrition+ birleşik ekranı `/nutrition/` adresindedir; ana uygulamanın Beslenme
+menüsü aynı ekranı açar. Varsayılan adapter `/api/nutrition-plus` kullanır; eski
+V8 endpointleri korunur. Güncel sözleşme, canlı kaynak kanıtı ve açık eksikler:
+[NUTRITION_PLUS.md](NUTRITION_PLUS.md).
+
+Nutrition+ `70000b4` entegrasyonu `integration/v9` içinde doğrulandı: **122 test
+başarılı**. Ana menüde Beslenme → `/nutrition/`; eski işlevler korunur, sürüm
+isimleri kullanıcı metinlerinde gösterilmez. Kaynak dalda daha sonra oluşan
+`7d5f57f` ile ayrı unified-ux/turnstiles çalışmaları bu birleşimin dışındadır.

@@ -229,6 +229,7 @@ function api(method,pathname,body,u){
  throw new Error('Endpoint bulunamadı');
 }
 const nutrition = require('./backend/nutrition')(db);
+const nutritionPlus = require('./backend/nutrition-plus')(db);
 const v9 = require('./backend/v9')(db);
 const mime={'.html':'text/html; charset=utf-8','.js':'application/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.ico':'image/x-icon','.webmanifest':'application/manifest+json'};
 const authLimit=security.createLimiter();
@@ -267,6 +268,7 @@ const server=http.createServer(async(req,res)=>{security.headers(res,config);try
    res.setHeader('Set-Cookie',`fc_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${config.secure?'; Secure':''}`);return send(res,200,{ok:true});
   }
   if(!u&&url.pathname!=='/api/me'){const e=Error('Oturum açmanız gerekiyor');e.status=401;throw e}
+  if(url.pathname.startsWith('/api/nutrition-plus/')) return send(res,200,await nutritionPlus(req.method,url.pathname,req.method==='GET'?Object.fromEntries(url.searchParams):body,u));
   if(url.pathname.startsWith('/api/v8/')) return send(res,200,await nutrition(req.method,url.pathname,req.method==='GET'?Object.fromEntries(url.searchParams):body,u));
   return send(res,200,api(req.method,url.pathname,req.method==='GET'?{...body,member_id:url.searchParams.get('member_id')}:body,u));
  }
