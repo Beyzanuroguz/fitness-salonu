@@ -1,0 +1,41 @@
+# FORM CLUB - Render Free demo (ephemeral, synthetic data only). See RENDER_FREE_DEMO.md.
+# Applying this Blueprint is a manual step in the Render dashboard; nothing here deploys by itself.
+services:
+  - type: web
+    name: formclub-demo
+    runtime: node
+    plan: free
+    branch: feature/render-free-demo
+    buildCommand: node -e "require('node:sqlite')"
+    startCommand: node server.js
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: NODE_ENV
+        value: production
+      - key: APP_ENV
+        value: render-demo
+      - key: HOST
+        value: 0.0.0.0
+      - key: COOKIE_SECURE
+        value: "1"
+      - key: FITNESS_DB_PATH
+        value: /tmp/formclub-demo/demo.sqlite
+      - key: DEMO_SYNTHETIC_ONLY
+        value: "1"
+      - key: PAYMENTS_ENABLED
+        value: "0"
+      - key: SMS_ENABLED
+        value: "0"
+      - key: EMAIL_ENABLED
+        value: "0"
+      - key: TURNSTILE_ENABLED
+        value: "0"
+      # Secrets: entered in the dashboard, never committed. 16+ characters, all different.
+      - key: DEMO_ADMIN_PASSWORD
+        sync: false
+      - key: DEMO_TEACHER_PASSWORD
+        sync: false
+      - key: DEMO_MEMBER_PASSWORD
+        sync: false

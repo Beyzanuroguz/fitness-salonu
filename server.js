@@ -9,6 +9,8 @@ const config = security.config();
 process.umask(0o077);
 const DBFILE = process.env.FITNESS_DB_PATH || path.join(ROOT, 'fitness.sqlite');
 if (process.env.NODE_ENV === 'test' && (!process.env.FITNESS_DB_PATH || path.resolve(DBFILE) === path.join(ROOT, 'fitness.sqlite'))) throw Error('Testler ayrı FITNESS_DB_PATH gerektirir');
+// Render Free demo: ephemeral, rebuilt from synthetic data on every start (backend/render-demo.js).
+if (config.renderDemo) require('./backend/render-demo').prepare(DBFILE);
 const db = new DatabaseSync(DBFILE);
 db.exec(`PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000; PRAGMA synchronous=FULL;
 CREATE TABLE IF NOT EXISTS members(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,phone TEXT DEFAULT '',email TEXT DEFAULT '',plan TEXT NOT NULL DEFAULT 'Aylık + 8 Ders',expires TEXT NOT NULL,credits INTEGER NOT NULL DEFAULT 8,status TEXT NOT NULL DEFAULT 'Aktif',created_at TEXT DEFAULT CURRENT_TIMESTAMP);
@@ -50,7 +52,7 @@ function assertAllowed(u,condition){if(!condition){const e=Error('Bu işlem içi
 function userScope(u,state){if(u.role==='admin')return state;if(u.role==='member'){state.members=state.members.filter(x=>x.id===u.member_id);state.bookings=state.bookings.filter(x=>x.member_id===u.member_id);state.measurements=state.measurements.filter(x=>x.member_id===u.member_id);state.checkins=state.checkins.filter(x=>x.member_id===u.member_id);state.payments=state.payments.filter(x=>x.member_id===u.member_id);state.trainers=[];state.stats={};}else{const ids=new Set(state.classes.filter(x=>x.trainer_id===u.trainer_id).map(x=>x.id));state.classes=state.classes.filter(x=>ids.has(x.id));state.bookings=state.bookings.filter(x=>ids.has(x.class_id));const members=new Set(state.bookings.map(x=>x.member_id));state.members=state.members.filter(x=>members.has(x.id)).map(x=>({id:x.id,name:x.name,credits:x.credits,plan:x.plan}));state.trainers=state.trainers.filter(x=>x.id===u.trainer_id);state.payments=[];state.checkins=[];state.measurements=[];state.stats={};}return state}
 function datePlus(days){const d=new Date();d.setDate(d.getDate()+days);return d.toISOString().slice(0,10)}
 function dateTimePlus(days,hour,minute=0){const d=new Date();d.setDate(d.getDate()+days);d.setHours(hour,minute,0,0);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}T${String(hour).padStart(2,'0')}:${String(minute).padStart(2,'0')}:00`}
-if(!config.production && db.prepare('SELECT count(*) n FROM members').get().n===0){
+if((!config.production||config.renderDemo) && db.prepare('SELECT count(*) n FROM members').get().n===0){
   const insert=db.prepare('INSERT INTO members(name,phone,email,plan,expires,credits) VALUES(?,?,?,?,?,?)');
   [['Ayşe Yılmaz','05320000001','ayse@example.com','Aylık + 8 Ders',15,6],['Zeynep Kaya','05320000002','zeynep@example.com','Pilates 8 Ders',7,4],['Elif Şahin','05320000003','elif@example.com','Aylık Fitness',22,0],['Merve Arslan','05320000004','merve@example.com','Aylık + 8 Ders',3,8],['Burak Şen','05320000005','burak@example.com','Aylık Fitness',2,0],['Gizem Ak','05320000006','gizem@example.com','Pilates 8 Ders',5,3]].forEach(r=>insert.run(r[0],r[1],r[2],r[3],datePlus(r[4]),r[5]));
   const t=db.prepare('INSERT INTO trainers(name,specialty) VALUES(?,?)');[['Ece K.','Pilates Reformer'],['Mert A.','Spinning'],['Deniz T.','Fonksiyonel'],['Can B.','HIIT'],['Selim D.','Boks']].forEach(x=>t.run(...x));
@@ -61,6 +63,7 @@ if(!config.production && db.prepare('SELECT count(*) n FROM members').get().n===
   [[-90,68,28.3,25.3],[-60,66.1,26.9,25.8],[-30,65,25.2,26.1],[0,63.8,24.1,26.3]].forEach(x=>db.prepare('INSERT INTO measurements(member_id,measured_at,weight,body_fat,muscle) VALUES(1,?,?,?,?)').run(datePlus(x[0]),x[1],x[2],x[3]));
   db.prepare('INSERT INTO announcements(title,body) VALUES(?,?)').run('Açık hava antrenmanı','Cumartesi 09:00’da açık hava antrenmanına davetlisiniz!');
 }
+if(config.renderDemo)require('./backend/render-demo').seed(db,pwHash);
 const q={members:()=>db.prepare('SELECT * FROM members ORDER BY id DESC').all(),trainers:()=>db.prepare('SELECT * FROM trainers').all(),classes:()=>db.prepare(`SELECT c.*,t.name trainer,(SELECT COUNT(*) FROM bookings b WHERE b.class_id=c.id AND b.status IN ('reserved','attended')) booked FROM classes c JOIN trainers t ON t.id=c.trainer_id WHERE c.starts_at>=datetime('now','localtime','-30 days') ORDER BY c.starts_at LIMIT 10000`).all(),bookings:()=>db.prepare('SELECT b.*,m.name member,c.title class_title,c.starts_at FROM bookings b JOIN members m ON m.id=b.member_id JOIN classes c ON c.id=b.class_id ORDER BY b.id DESC').all(),payments:()=>db.prepare('SELECT p.*,m.name member FROM payments p JOIN members m ON m.id=p.member_id ORDER BY p.id DESC').all(),checkins:()=>db.prepare('SELECT i.*,m.name member FROM checkins i JOIN members m ON m.id=i.member_id ORDER BY i.id DESC LIMIT 100').all(),measurements:()=>db.prepare('SELECT * FROM measurements ORDER BY measured_at').all(),announcements:()=>db.prepare('SELECT * FROM announcements ORDER BY id DESC').all()};
 function send(res,status,obj){res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});res.end(JSON.stringify(obj))}
 function log(action){db.prepare('INSERT INTO activity(action,details) VALUES(?,?)').run(action,'')}
@@ -238,6 +241,7 @@ const dummyHash=pwHash(randomBytes(32).toString('hex'));
 let shuttingDown=false;
 const server=http.createServer(async(req,res)=>{security.headers(res,config);try{
  const url=new URL(req.url,'http://localhost');
+ if(config.renderDemo&&url.pathname==='/robots.txt'){res.writeHead(200,{'Content-Type':'text/plain; charset=utf-8'});return res.end('User-agent: *\nDisallow: /\n')}
  if(url.pathname==='/healthz'){if(req.method!=='GET')return send(res,405,{error:'Yöntem desteklenmiyor'});try{if(shuttingDown)throw Error();db.prepare('SELECT 1').get();return send(res,200,{status:'ok'})}catch{return send(res,503,{status:'unavailable'})}}
  if(url.pathname.startsWith('/api/')){
   security.guard(req,config);

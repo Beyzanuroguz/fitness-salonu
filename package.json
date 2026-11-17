@@ -1,0 +1,10 @@
+{
+  "name": "formclub-render-demo",
+  "private": true,
+  "version": "9.5.0",
+  "engines": { "node": ">=24 <25" },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/*.test.js tests/*.test.js mobile/test/*.test.js"
+  }
+}
