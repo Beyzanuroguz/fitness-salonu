@@ -269,4 +269,4 @@ const server=http.createServer(async(req,res)=>{try{
  const stat=fs.statSync(file);if(!stat.isFile())throw Error('Bulunamadı');res.writeHead(200,{'Content-Type':mime[path.extname(file)]||'application/octet-stream'});fs.createReadStream(file).pipe(res);
  }catch(e){if(req.url.startsWith('/api/'))send(res,e.status||400,{error:e.message});else{res.writeHead(404);res.end('Bulunamadı')}}});
 module.exports = { server, db };
-const PORT=Number(process.env.PORT||3000);if(require.main===module)server.listen(PORT,()=>console.log(`\n✅ FORM CLUB hazır: http://localhost:${PORT}\n📁 Veritabanı: ${DBFILE}\n`));
+const PORT=Number(process.env.PORT||3001);if(require.main===module)server.listen(PORT,()=>console.log(`\n✅ FORM CLUB hazır: http://localhost:${PORT}\n📁 Veritabanı: ${DBFILE}\n`));

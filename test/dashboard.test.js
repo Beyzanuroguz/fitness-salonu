@@ -108,6 +108,7 @@ test('main app opens the dashboard on administrator login and filter events redr
   const app = { innerHTML: '' }, events = new Map();
   let analyticsUnavailable = false;
   const context = vm.createContext({
+    window: { addEventListener() {} }, navigator: { onLine: true }, location: { hash: '' },
     FormClubDashboard: dashboard,
     document: {
       getElementById: id => id === 'app' ? app : null,

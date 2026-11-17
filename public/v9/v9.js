@@ -46,7 +46,7 @@ function toast(message, bad = false) {
 }
 
 async function api(path, options = {}) {
-  const init = { credentials: 'same-origin', headers: { Accept: 'application/json' }, ...options };
+  const init = { credentials: 'same-origin', cache: 'no-store', headers: { Accept: 'application/json' }, ...options };
   if (options.body !== undefined) { init.headers['Content-Type'] = 'application/json'; init.body = JSON.stringify(options.body); }
   let response;
   try { response = await fetch(path, init); }
@@ -76,14 +76,14 @@ function pages() {
   const list = [];
   if (S.role === 'member') list.push(['qr', 'QR kodum', 'qr']);
   if (S.role === 'admin') list.push(['scan', 'QR okut', 'scan']);
-  if (S.role === 'teacher') list.push(['performance', 'Performans', 'chart']);
-  if (S.role === 'member') list.push(['notifications', 'Bildirimler', 'bell']);
+  if (staff()) list.push(['performance', 'Performans', 'chart']);
+  list.push(['notifications', 'Bildirimler', 'bell']);
   list.push(['more', 'Diğer', 'more']);
   return list;
 }
 const TITLES = {
   qr: ['ÜYE GİRİŞİ', 'QR giriş kodun'],
-  scan: ['TURNİKE · RESEPSİYON', 'QR okut'],
+  scan: ['RESEPSİYON', 'QR okut'],
   performance: ['EĞİTMEN', 'Performans'],
   notifications: ['BİLDİRİM MERKEZİ', 'Bildirimler'],
   more: ['UYGULAMA', 'Diğer']
@@ -195,7 +195,7 @@ function qrView() {
   if (q.error && !q.token) return `<div class="notice bad" role="alert"><div class="grow">${esc(q.error)}</div></div><button class="btn" data-qr-refresh>${icon('refresh')} Tekrar dene</button>`;
   const me = (S.state?.members || [])[0];
   return `<section class="card qr-card"><div class="qr-wrap">
-    <p class="muted" style="margin:0">Turnikedeki okuyucuya veya resepsiyona göster. Kod her ${q.ttl} saniyede yenilenir ve tek kullanımlıktır.</p>
+    <p class="muted" style="margin:0">Resepsiyondaki yöneticiye göster. Kod her ${q.ttl} saniyede yenilenir ve tek kullanımlıktır.</p>
     <div class="qr-frame" id="qr-frame" role="img" aria-label="Giriş QR kodu"><div class="qr-overlay" id="qr-overlay">${q.loading && !q.token ? 'Kod hazırlanıyor…' : ''}</div></div>
     <div class="countdown" id="qr-count" aria-live="off"></div>
     <button class="btn" data-qr-refresh ${q.loading ? 'disabled' : ''}>${icon('refresh')} Yeni kod al</button>
@@ -389,9 +389,8 @@ function updateScanUI() {
 /* ---------- Notifications ---------- */
 let noteTimer = 0;
 async function loadNotifications() {
-  if (S.role !== 'member') return;
   try {
-    S.notes = K.normalizeNotifications(await api(K.ENDPOINTS.notifications));
+    S.notes = K.normalizeNotifications(await api(S.role==='member'?K.ENDPOINTS.notifications:'/api/v9/staff/notifications'));
     S.notesLoaded = true; S.notesError = ''; S.notesMissing = false;
   } catch (e) {
     S.notesLoaded = true; S.notesMissing = K.isMissingApi(e); S.notesError = e.message;
@@ -425,7 +424,7 @@ function notesView() {
 }
 async function markRead(ids) {
   try {
-    for (const id of ids) await api(K.ENDPOINTS.notificationRead, { method: 'POST', body: { id } });
+    for (const id of ids) await api(S.role==='member'?K.ENDPOINTS.notificationRead:'/api/v9/staff/notifications/read', { method: 'POST', body: { id } });
     S.notes = S.notes.map(n => ids.includes(n.id) ? { ...n, read: true } : n);
   } catch (e) { toast(e.message, true); }
   loadNotifications();
@@ -440,7 +439,7 @@ async function loadReport() {
   const trainerId = S.role === 'admin' ? r.trainerId : null;
   try {
     const months = K.monthsBack(r.year, r.month, 6);
-    const results = await Promise.all(months.map(m => api(K.reportQuery(m.year, m.month, trainerId)).then(K.normalizeReport)));
+    const results = await Promise.all(months.map(m => api(S.role==='admin'?'/api/v9/admin/reports/monthly?month='+m.year+'-'+String(m.month).padStart(2,'0')+'&trainer_id='+trainerId:K.reportQuery(m.year,m.month)).then(K.normalizeReport)));
     if (seq !== reportSeq) return;
     r.data = results.at(-1); r.trend = results; r.missing = false;
   } catch (e) {
@@ -594,7 +593,7 @@ window.addEventListener('online', () => setOnline(true));
 window.addEventListener('offline', () => setOnline(false));
 
 /* ---------- Service worker ---------- */
-if ('serviceWorker' in navigator && window.isSecureContext) {
+if (!new URLSearchParams(location.search).has('embedded') && 'serviceWorker' in navigator && window.isSecureContext) {
   window.addEventListener('load', async () => {
     try {
       const reg = await navigator.serviceWorker.register('/v9/sw.js', { scope: '/v9/' });

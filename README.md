@@ -822,3 +822,21 @@ Hatalar: oturumsuz `401`, yetkisiz/aktif olmayan üyelik `403`, geçersiz girdi
 QR ve oturum token'larını URL, günlük veya analitik sistemlerine yazmayın.
 
 Doğrulama: `node --test test/*.test.js tests/*.test.js`.
+
+
+### Birleşik V1–V9 uygulama
+
+Ana giriş `/` adresindedir. Yönetici, eğitmen ve üye aynı oturum ekranını kullanır;
+menüler hesap rolüne göre açılır. Eski V7/V8/V9 adresleri ana uygulamaya yönlenir.
+Beslenme ekranı V8 günlük, besin ekleme, analiz ve sağlık sayfalarını; QR,
+bildirimler ve eğitmen raporları V9 modülünü aynı uygulama içinde açar.
+QR doğrulama sunucuda yalnızca yöneticiye açıktır. Eğitmen kendi raporunu,
+yönetici seçtiği eğitmenin raporunu görebilir.
+
+Kök PWA çalışanı yalnızca açıkça listelenmiş statik dosyaları önbelleğe alır.
+API yanıtları `no-store` kullanır; kişisel veriler, QR ve oturum bilgileri
+Cache Storage'a yazılmaz. Çevrimdışı kabuk açılır, kişisel işlemler bağlantı ister.
+Bildirimler uygulama açıkken sorgulanır; arka plan Web Push desteği yoktur.
+
+Doğrulama: `NODE_ENV=test FITNESS_DB_PATH=:memory: node --test test/*.test.js tests/*.test.js`.
+HTTP testleri geçici yerel port, V8 süreç testi geçici dizinde SQLite kullanır.

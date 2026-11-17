@@ -45,8 +45,8 @@ test('service worker precaches existing files, never caches /api/ and stays insi
   assert.match(js, /register\('\/v9\/sw\.js', \{ scope: '\/v9\/' \}\)/);
 });
 
-test('V9 does not touch V7/V8 entry pages', () => {
-  for (const page of ['index.html', 'v7.html', 'v8.html']) assert.doesNotMatch(fs.readFileSync(file(page), 'utf8'), /serviceWorker|manifest/);
+test('Legacy pages do not register independent service workers', () => {
+  for (const page of ['v7.html', 'v8.html']) assert.doesNotMatch(fs.readFileSync(file(page), 'utf8'), /serviceWorker|manifest/);
 });
 
 test('worker bypasses personal APIs, unknown resources and query URLs at runtime', async () => {

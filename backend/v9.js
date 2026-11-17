@@ -36,7 +36,7 @@ module.exports = function createV9(db, clock = Date.now) {
     if (!u) fail('Oturum gerekli', 401);
     if (!body || typeof body !== 'object' || Array.isArray(body)) fail('JSON nesnesi gerekli');
     const now = clock(), route = pathname.slice('/api/v9'.length);
-    for (const key of ['user_id', 'member_id', 'trainer_id']) if (body[key] !== undefined && Number(body[key]) !== u[key === 'user_id' ? 'id' : key]) fail('Yalnızca kendi kayıtlarınıza erişebilirsiniz', 403);
+    for (const key of ['user_id', 'member_id', ...(route === '/admin/reports/monthly' && u.role === 'admin' ? [] : ['trainer_id'])]) if (body[key] !== undefined && Number(body[key]) !== u[key === 'user_id' ? 'id' : key]) fail('Yalnızca kendi kayıtlarınıza erişebilirsiniz', 403);
     if (method === 'POST' && route === '/qr') {
       if (u.role !== 'member' || !u.member_id) fail('Üye hesabı gerekli', 403);
       active(u.member_id, now);
@@ -69,6 +69,16 @@ module.exports = function createV9(db, clock = Date.now) {
         return { ok: true, checkin_id: Number(result.lastInsertRowid), member_id: qr.member_id };
       } catch (e) { db.exec('ROLLBACK'); throw e; }
     }
+    if (route === '/staff/notifications' || route === '/staff/notifications/read') {
+      if (!['admin','teacher'].includes(u.role)) fail('Personel hesabı gerekli',403);
+      const items = db.prepare('SELECT * FROM announcements ORDER BY id DESC').all().map(a=>({id:'announcement:'+a.id,type:'announcement',title:a.title,message:a.body,due_at:a.created_at,read:!!db.prepare('SELECT 1 FROM v9_reminder_reads WHERE user_id=? AND reminder_key=?').get(u.id,'announcement:'+a.id)}));
+      if(method==='GET' && route==='/staff/notifications') return {reminders:items};
+      if(method==='POST' && route==='/staff/notifications/read') {
+        if(!items.some(x=>x.id===body.id)) fail('Bildirim bulunamadı',404);
+        db.prepare('INSERT OR IGNORE INTO v9_reminder_reads VALUES(?,?,?)').run(u.id,body.id,now);return {ok:true};
+      }
+      fail('API bulunamadı',404);
+    }
     if (method === 'GET' && route === '/reminders') return { reminders: reminders(u, now) };
     if (method === 'POST' && route === '/reminders/read') {
       const item = reminders(u, now).find(x => x.id === body.id);
@@ -76,8 +86,11 @@ module.exports = function createV9(db, clock = Date.now) {
       db.prepare('INSERT OR IGNORE INTO v9_reminder_reads VALUES(?,?,?)').run(u.id, item.id, now);
       return { ok: true };
     }
-    if (method === 'GET' && route === '/teacher/reports/monthly') {
-      if (u.role !== 'teacher' || !u.trainer_id) fail('Eğitmen hesabı gerekli', 403);
+    if (method === 'GET' && (route === '/teacher/reports/monthly' || route === '/admin/reports/monthly')) {
+      const adminReport=route==='/admin/reports/monthly';
+      if(adminReport ? u.role!=='admin' : (u.role!=='teacher'||!u.trainer_id)) fail('Rapor yetkisi gerekli',403);
+      const trainerId=adminReport?Number(body.trainer_id):u.trainer_id;
+      if(!Number.isInteger(trainerId)||!db.prepare('SELECT 1 FROM trainers WHERE id=?').get(trainerId)) fail('Eğitmen bulunamadı',404);
       const month = body.month || today(now).slice(0, 7);
       if (typeof month !== 'string' || !/^\d{4}-(0[1-9]|1[0-2])$/.test(month) || month.slice(0, 4) === '0000') fail('Geçersiz ay');
       const classes = db.prepare(`SELECT c.id,c.title,c.starts_at,c.capacity,
@@ -85,9 +98,9 @@ module.exports = function createV9(db, clock = Date.now) {
         SUM(CASE WHEN b.status='attended' THEN 1 ELSE 0 END) attended,
         SUM(CASE WHEN b.status IN ('attended','absent') THEN 1 ELSE 0 END) marked
         FROM classes c LEFT JOIN bookings b ON b.class_id=c.id
-        WHERE c.trainer_id=? AND substr(c.starts_at,1,7)=? GROUP BY c.id ORDER BY c.starts_at,c.id`).all(u.trainer_id, month);
+        WHERE c.trainer_id=? AND substr(c.starts_at,1,7)=? GROUP BY c.id ORDER BY c.starts_at,c.id`).all(trainerId, month);
       const totals = classes.reduce((a, c) => { for (const k of ['capacity','booked','attended','marked']) a[k] += c[k]; return a; }, { capacity: 0, booked: 0, attended: 0, marked: 0 });
-      return { month, trainer_id: u.trainer_id, class_count: classes.length, ...totals, attendance_percent: percent(totals.attended, totals.marked), occupancy_percent: percent(totals.booked, totals.capacity), classes: classes.map(c => ({ ...c, occupancy_percent: percent(c.booked, c.capacity), attendance_percent: percent(c.attended, c.marked) })) };
+      return { month, trainer_id: trainerId, class_count: classes.length, ...totals, attendance_percent: percent(totals.attended, totals.marked), occupancy_percent: percent(totals.booked, totals.capacity), classes: classes.map(c => ({ ...c, occupancy_percent: percent(c.booked, c.capacity), attendance_percent: percent(c.attended, c.marked) })) };
     }
     fail('API bulunamadı', 404);
   };
