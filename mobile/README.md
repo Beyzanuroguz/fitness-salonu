@@ -45,7 +45,7 @@ Bağlantı kesilince `www/offline.html` açılır.
 
 ## Aşamalı plan
 
-1. **Pilot (hazır):** `server.url` kabuğu, kamera izinleri, çevrimdışı/kurulum sayfaları.
+1. **Pilot altyapısı (yerel testler başarılı; cihaz doğrulaması bekliyor):** `server.url` kabuğu, kamera izinleri, çevrimdışı/kurulum sayfaları.
    Cihazda deneme için Xcode ve Android Studio gerekir.
 2. **Mağaza hazırlığı:**
    - İkon ve açılış ekranı üretimi. Kaynak: `public/v9/icons/`.
@@ -62,12 +62,48 @@ Bağlantı kesilince `www/offline.html` açılır.
 
 - **Sunucu (backend ekibi):**
   - HTTPS ve HSTS.
-  - `.webmanifest` için `application/manifest+json` MIME türü. Şu an `application/octet-stream` dönüyor.
-  - Statik dosyalar için `Cache-Control` başlığı.
-  - `Permissions-Policy: camera=(self)`.
+  - `.webmanifest`: `application/manifest+json` V9.5 HTTP testlerinde doğrulandı.
+  - Statik dosyalar: `public, max-age=0, must-revalidate`; kişisel API ve hatalar `no-store`.
+  - `Permissions-Policy: camera=(self), microphone=(), geolocation=()` HTTP testlerinde doğrulandı.
 - **Uygulama mağazaları:** Apple, hesap oluşturan uygulamalarda uygulama içi hesap silme
   ister. Bugün hesapları yönetici açıyor; politika gözden geçirilmeli.
 - **iOS WKWebView:** service worker yalnızca App-Bound Domains ile çalışır. Kabuk bunu
   gerektirmez; çevrimdışı sayfa native `errorPath` ile gösterilir.
 - **Derleme:** Bu makinede JDK, Android SDK ve tam Xcode kurulu olmadığı için APK veya
   IPA derlemesi doğrulanmadı.
+
+
+## V9.5 güvenli staging bağlantısı
+
+[Staging kurulumu](../deploy/STAGING.md) ve [yayın kapıları](../PRODUCTION_READINESS.md).
+`staging.env.example` yalnızca yapılandırma örneğidir; runtime-config veya native
+projelerde üretilmiş canlı adresler commit edilmez. Örnek dosyayı repo dışında
+saklayıp düzenleyin; Node `--env-file` seçeneğiyle configure çalıştırılabilir:
+
+```sh
+node --env-file=/etc/formclub-staging/mobile.env scripts/configure.js
+```
+
+`cap sync` sırasında da aynı env dosyasını/süreç değişkenlerini kullanın; farklı env
+ile sync çalıştırmak başka adres üretebilir. Native platform dosyaları yeniden sync
+ve gerçek cihazda test edilmeden mağaza paketi hazır kabul edilmez.
+
+- `FORMCLUB_BUILD_ENV=staging`: HTTPS adresi ve eşleşen
+  `FORMCLUB_EXPECTED_ORIGIN`, ayrı `.staging` paket kimliği zorunlu.
+- `FORMCLUB_BUILD_ENV=production`: HTTPS + beklenen köken zorunlu; bu ayar mağaza
+  onayı sağlamaz. Staging/release modunda cleartext opt-in bile reddedilir.
+- Yalnızca kök sunucu kökeni desteklenir; `/app` alt dizini, kullanıcı bilgisi,
+  token/query/hash içeren adresler reddedilir. Derleme hatası ham URL'yi loglamaz.
+- Kabuk gerçek HTTPS sayfasını açar. Göreli API istekleri aynı kökenlidir; backend
+  `capacitor://localhost` veya `https://localhost` CORS erişimini açmaz.
+  SameSite=Strict/HttpOnly/Secure korunur. Gömülü web→cross-origin API mimarisi
+  bu sürümün kapsamı değildir.
+- Ek `allowNavigation` host izni kaldırıldı; yabancı kökenlerin native bridge'e
+  alınması istenmez. Native logging `none`; mixed content/debug kapalı.
+- Beklenen köken kontrolü derleme hatalarını yakalar; sertifika pinning değildir.
+  TLS doğrulaması WebView/OS'ye aittir. Gerçek cihaz cookie, kamera ve yönlendirme
+  davranışları henüz doğrulanmadı.
+
+Capacitor `server.url` canlı yeniden yükleme/pilot kullanımına yöneliktir;
+[resmî yapılandırma belgesi](https://capacitorjs.com/docs/config) bu seçeneği üretim
+kullanımı için önermiyor. App Store/Play üretim mimarisi ve onayı hâlâ yayın kapısıdır.

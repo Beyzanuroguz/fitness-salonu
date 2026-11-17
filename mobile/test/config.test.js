@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const load = env => {
-  const keys = ['FORMCLUB_SERVER_URL', 'FORMCLUB_APP_ID', 'FORMCLUB_ALLOW_CLEARTEXT'], saved = {};
+  const keys = ['FORMCLUB_SERVER_URL', 'FORMCLUB_APP_ID', 'FORMCLUB_ALLOW_CLEARTEXT', 'FORMCLUB_BUILD_ENV', 'FORMCLUB_EXPECTED_ORIGIN'], saved = {};
   for (const k of keys) { saved[k] = process.env[k]; delete process.env[k]; }
   Object.assign(process.env, env);
   const file = require.resolve('../capacitor.config.js');
@@ -24,7 +24,8 @@ test('with a server URL the shell loads it over https only, with an offline page
   const c = load({ FORMCLUB_SERVER_URL: 'https://club.example.com' });
   assert.equal(c.server.url, 'https://club.example.com');
   assert.equal(c.server.cleartext, false);
-  assert.deepEqual(c.server.allowNavigation, ['club.example.com']);
+  assert.equal(c.server.allowNavigation, undefined);
+  assert.equal(c.loggingBehavior,'none');
   assert.ok(fs.existsSync(path.join(__dirname, '..', 'www', c.server.errorPath)));
   assert.equal(c.android.allowMixedContent, false);
   assert.equal(c.android.webContentsDebuggingEnabled, false);

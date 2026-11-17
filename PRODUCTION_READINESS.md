@@ -1,6 +1,6 @@
-# FORM CLUB V9 Unified — üretime hazırlık
+# FORM CLUB V9.5 Unified — üretime ve staging hazırlığı
 
-Değerlendirme: 17 Kasım 2026. Dal: `integration/v9`; başlangıç: `2c50d92`.
+Değerlendirme: 17 Kasım 2026. Dal: `integration/v9`; V9.5 başlangıcı: `b87051d` (önceki güvenlik tabanı `277fb78`).
 Karar: **Canlı ticari kullanıma henüz onay verilmedi.** PASS yalnızca aşağıdaki
 kanıtın kapsamını belirtir; canlı sistem sertifikası veya bağımsız penetrasyon testi değildir.
 Bu çalışma canlıya dağıtım yapmadı, gerçek `fitness.sqlite` dosyasını açmadı/değiştirmedi.
@@ -126,11 +126,11 @@ CSRF tasarım kaynağı: [OWASP CSRF Prevention](https://cheatsheetseries.owasp.
 ## Yerel doğrulama
 
 ```sh
-NODE_ENV=test FITNESS_DB_PATH=:memory: node --test test/*.test.js tests/*.test.js
+NODE_ENV=test FITNESS_DB_PATH=:memory: node --test test/*.test.js tests/*.test.js mobile/test/*.test.js
 git diff --check
 ```
 
-Son çalıştırma: **63/63 PASS**, 0 fail/skip. HTTP testleri geçici yerel port,
+V9.5 son çalıştırma: **78/78 PASS** (66 ana + 12 mobil), 0 fail/skip. HTTP testleri geçici yerel port,
 SQLite testleri bellek veya geçici dizin kullanır. `test/operations.test.js` gerçek
 WAL/restore ve production SIGTERM; `test/security.test.js` cookie/CSRF/CORS/login
 rate limit, hata redaksiyonu, XSS kaçışı ve health 200/503 kontrollerini ekler.
@@ -139,3 +139,31 @@ rate limit, hata redaksiyonu, XSS kaçışı ve health 200/503 kontrollerini ekl
 Sıradaki aşama: bağımsız staging güvenlik incelemesi ve gerçek mobil tarayıcı
 kabul testleri; eş zamanlı olarak MFA/hesap yaşam döngüsü, KVKK, ödeme kapsamı,
 yeni salon kurulumu ve şifreli offsite yedek/alarmların tamamlanması.
+
+
+## V9.5 güncel yayın kapıları ve kanıtlar
+
+Bu bölüm önceki kanıtları günceller. Gerçek staging sunucusu kurulmadı; hazırlama
+araçları, ayrı yapılandırma örnekleri ve aşağıdaki yerel testler tamamlandı.
+
+| Madde | Durum | V9.5 kanıtı / kalan iş |
+|---|---|---|
+| Manifest MIME ve statik cache | PASS | `test/v95.test.js`: her iki manifest application/manifest+json; HTML, JS, SW ve iframe statikleri public,max-age=0,must-revalidate. API/health/hata yanıtları no-store. Statikler kullanıcı içeriği içermez; SW statik allowlist korunur. |
+| Kamera izin başlığı | PASS | Kök ve gömülü modüllerde camera=(self), microphone/geolocation kapalı; iframe aynı HTTPS kökenini kullanır. Gerçek native kamera testi değildir. |
+| CORS / CSRF mobil uyumu | PASS | Native localhost/capacitor kökenlerine CORS açılmadı; POST reddi, aynı HTTPS Origin ile staging login ve QR akışı test edildi. SameSite=Strict ve Secure korunur; SameSite=None veya localStorage oturum eklenmedi. |
+| Bağımsız sentetik staging | PASS | `scripts/prepare-staging.js`, `deploy/staging.env.example`, `deploy/STAGING.md`: yalnızca yeni özel dizinde sentetik DB; import/overwrite yok; mevcut dizin reddi. Başlangıç APP_ENV=staging, production güvenliği, köken-marker, DB path/symlink/hardlink kontrolü ve noindex başlığı test edildi. Marker kötü niyetli yetkili operatöre karşı izolasyon sağlamaz; müşteri verisi sonradan kopyalanmamalı. |
+| Staging hesap + QR yaşam döngüsü | PASS | Geçici staging prosesinde CLI admin, API üye hesabı, login HttpOnly/Secure/Strict cookie, QR üretimi, üye doğrulama reddi, admin doğrulama, logout 401 ve SIGTERM testi. |
+| Mobil sunucu ayarları | PASS | Sadece kök URL; staging/release için beklenen HTTPS kökeni, cleartext override reddi; staging .staging appId kontrolü. URL hata mesajında sır yok; ek allowNavigation kaldırıldı, native logging none, debug/mixed content kapalı. Bu köken eşleşmesi sertifika pinning değildir. |
+| Native staging paket kimliği | NOT TESTED | Capacitor appId değişkeni mevcut Xcode/Gradle bundle kimliklerini kendiliğinden değiştirmez. Ayrı staging target/applicationId kurulmalı, sync sonrası native kimlik ve yan yana yükleme doğrulanmalı. Konfigürasyon testi binary kanıtı değildir. |
+| Gerçek HTTPS/proxy/CORS/WebView | NOT TESTED | Yerel test HTTPS Origin başlığıyla loopback HTTP proxy hop'unu taklit eder. DNS, sertifika zinciri, HTTP yönlendirme, firewall, gerçek WebView cookie/same-origin davranışı doğrulanmadı. Staging nginx/systemd örnekleri servise kurulmadı. |
+| Mağaza üretim mimarisi | FAIL | Uzak server.url kabuğu pilot olarak korunuyor. Capacitor belgeleri bu seçeneği üretim için önermiyor; mağaza mimarisi ve kabulü ayrıca karara bağlanmalı. [Resmî yapılandırma belgesi](https://capacitorjs.com/docs/config). |
+| Mobil kamera / PWA kurulumu | NOT TESTED | Android/iOS build, fiziksel kamera izinleri, PWA yükleme/güncelleme ve çevrimdışı geri dönüş hâlâ cihaz kabul kapısı. |
+| KVKK / ödeme / MFA / hesap yaşam döngüsü | NOT TESTED | Önceki FAIL/NOT TESTED maddeleri kapanmadı. Hukuki inceleme, ödeme sağlayıcısı doğrulaması ve yönetici MFA/kurtarma/hesap kapatma akışları bekliyor. |
+| Yeni salon başlangıç akışı | FAIL | Sentetik staging fixture üretim salon kurulum akışının yerine geçmez. Üretim için eğitmen/paket başlangıç ve onboarding işi devam ediyor. |
+| Şifreli offsite yedek ve alarm | NOT TESTED | Yerel WAL backup/restore testleri korunuyor; gerçek zamanlayıcı, şifreleme, offsite kopya, izleme ve restore tatbikatı bekliyor. |
+
+Çalıştırılan tam komut: `NODE_ENV=test FITNESS_DB_PATH=:memory: node --test test/*.test.js tests/*.test.js mobile/test/*.test.js`.
+Sonuç **78 PASS / 0 FAIL / 0 SKIP**. `git diff --check` temiz. Gerçek müşteri SQLite
+verileri açılmadı/değiştirilmedi. Main merge, GitHub push ve canlı dağıtım yapılmadı.
+Staging ve mobil kullanım adımları: [deploy/STAGING.md](deploy/STAGING.md),
+[mobile/README.md](mobile/README.md).

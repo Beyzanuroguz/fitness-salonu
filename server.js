@@ -281,7 +281,7 @@ const server=http.createServer(async(req,res)=>{security.headers(res,config);try
  file=fs.realpathSync(file);
  if(!inside(file)){res.writeHead(403);return res.end('Yasak')}
  if(!Object.hasOwn(mime,path.extname(file))){res.writeHead(404);return res.end('Bulunamadı')}
- const stat=fs.statSync(file);if(!stat.isFile())throw Error('Bulunamadı');res.writeHead(200,{'Content-Type':mime[path.extname(file)]||'application/octet-stream'});const stream=fs.createReadStream(file);stream.on('error',()=>res.destroy());stream.pipe(res);
+ const stat=fs.statSync(file);if(!stat.isFile())throw Error('Bulunamadı');res.setHeader('Cache-Control','public, max-age=0, must-revalidate');res.writeHead(200,{'Content-Type':mime[path.extname(file)]||'application/octet-stream'});const stream=fs.createReadStream(file);stream.on('error',()=>res.destroy());stream.pipe(res);
  }catch(e){if(req.url.startsWith('/api/')){const internal=!!e.code||!Number.isInteger(e.status)&&/SQLITE|constraint|bind|datatype/i.test(e.message);if(internal)console.error(JSON.stringify({event:'request_error',requestId:randomUUID(),status:500}));if(e.status===429)res.setHeader('Retry-After','900');send(res,internal?500:e.status||400,{error:internal?'İşlem tamamlanamadı':e.message});}else{res.writeHead(404);res.end('Bulunamadı')}}});
 server.requestTimeout=15000;server.headersTimeout=10000;server.keepAliveTimeout=5000;
 async function shutdown(){if(shuttingDown)return;shuttingDown=true;const timer=setTimeout(()=>server.closeAllConnections(),10000);timer.unref();await new Promise(resolve=>server.close(resolve));clearTimeout(timer);if(db.isOpen)db.close()}

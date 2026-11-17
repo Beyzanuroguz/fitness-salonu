@@ -16,7 +16,7 @@ const config = {
   appName: 'FORM CLUB',
   webDir: 'www',
   backgroundColor: '#0b100d',
-  loggingBehavior: 'production',
+  loggingBehavior: 'none',
   ios: {
     contentInset: 'never',
     backgroundColor: '#0b100d',
@@ -33,7 +33,6 @@ if (server) {
   config.server = {
     url: server.url,
     cleartext: server.cleartext,
-    allowNavigation: [server.hostname],
     errorPath: 'offline.html'
   };
 }

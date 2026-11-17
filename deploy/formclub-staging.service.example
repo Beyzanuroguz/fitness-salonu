@@ -1,0 +1,24 @@
+[Unit]
+Description=FORM CLUB isolated staging
+After=network.target
+[Service]
+Type=simple
+User=formclub-staging
+Group=formclub-staging
+WorkingDirectory=/opt/formclub-staging/current
+EnvironmentFile=/etc/formclub-staging/staging.env
+ExecStart=/usr/bin/node server.js
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=20
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/formclub-staging
+StandardOutput=journal
+StandardError=journal
+[Install]
+WantedBy=multi-user.target

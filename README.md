@@ -844,3 +844,6 @@ HTTP testleri geçici yerel port, V8 süreç testi geçici dizinde SQLite kullan
 
 Üretim güvenliği, yayın kapıları, SQLite yedek/geri dönüş ve rollback adımları:
 [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md). Canlı ticari yayın onayı henüz verilmedi.
+
+V9.5 bağımsız sentetik staging kurulumu ve mobil HTTPS yapılandırması:
+[deploy/STAGING.md](deploy/STAGING.md).
