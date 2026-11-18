@@ -304,9 +304,18 @@ test('UI renders admin locker management and member scan / my-locker views (vm, 
   f.pass(U.one); f.claim(U.one, f.qr(4)); f.pass(U.one);
   f.lockers('PATCH', '/api/lockers/2', { status: 'maintenance', reason: 'Menteşe' }, U.admin);
   const adminHtml = await boot({ '/api/me': { user: { role: 'admin' } }, '/api/lockers': f.list() });
-  assert.equal((adminHtml.match(/<svg viewBox/g) || []).length, 20);
+  assert.equal((adminHtml.match(/aria-label="Dolap QR kodu"/g) || []).length, 20);
   for (const s of ['Dolap Yönetimi', 'SİMÜLASYON', 'Boş', 'Dolu', 'Bakımda', 'Pasif', 'Açık uyarı', 'Synthetic One turnikeden çıktı', 'Dolap ekle', 'Tüm QR kodlarını yazdır',
-    'Manuel boşalt', 'Üye ata', 'QR yenile', 'Dolap işlem kayıtları', 'Menteşe', 'Dolapla çıkış uyarısı', 'kopyalanabilir']) assert.ok(adminHtml.includes(s), s);
+    'manuel boşalt', 'Üye ata', 'QR yenile', 'Dolap işlem kayıtları', 'Menteşe', 'Dolapla çıkış uyarısı', 'kopyalanabilir']) assert.ok(adminHtml.includes(s), s);
+  // UI/UX V2: compact header icons, dropdown filter with counts, card icons + more menu, notes collapsed at the bottom.
+  for (const s of ['aria-label="Tüm QR kodlarını yazdır"', 'aria-label="Listeyi yenile"', 'aria-label="Dolap ekle"', '<select id="lk-filter">', '>Tümü (20)</option>', '>Bakımda (1)</option>',
+    'aria-label="Dolap 1 QR kodunu yazdır"', 'aria-label="Dolap 1 QR kimliğini yenile"', 'aria-label="Dolap 1 için diğer işlemler"', '>Dolap 01</h2>', 'Atanmamış', '20 dolap']) assert.ok(adminHtml.includes(s), s);
+  for (const b of adminHtml.match(/<button type="button" class="icon-btn[^>]*>/g)) { assert.match(b, /aria-label="[^"]+"/); assert.match(b, /title="[^"]+"/); }
+  assert.doesNotMatch(adminHtml, /data-act="filter"/, 'old filter buttons removed');
+  assert.match(adminHtml, /<details class="card lk-notes no-print"><summary>Bilgilendirme ve Güvenlik Notları<\/summary>/);
+  assert.ok(adminHtml.indexOf('lk-notes') > adminHtml.indexOf('Dolap işlem kayıtları'), 'notes sit at the bottom');
+  assert.ok(adminHtml.indexOf('SİMÜLASYON') > adminHtml.indexOf('locker-grid'), 'simulation note no longer above the content');
+  assert.ok(adminHtml.indexOf('Uyarılar: dolapla çıkış') < adminHtml.indexOf('locker-grid'), 'actionable alerts stay near the top');
   const ephemeral = await boot({ '/api/me': { user: { role: 'admin' } }, '/api/lockers': { ...f.list(), ephemeral: true } });
   assert.match(ephemeral, /yeniden başlayınca .*sıfırlanır/);
   const routes = { '/api/me': { user: { role: 'member' } }, '/api/lockers/me': f.lockers('GET', '/api/lockers/me', {}, U.one) };

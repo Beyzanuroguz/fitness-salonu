@@ -295,7 +295,7 @@ test('Nutrition+ is CSP-safe: no inline script, handlers, eval or javascript: UR
   assert.doesNotMatch(html, /<script(?![^>]*\bsrc=)[^>]*>/);
   assert.doesNotMatch(html, /<style/);
   const scripts = [...html.matchAll(/<script src="([^"]+)"/g)].map(m => m[1]);
-  assert.deepEqual(scripts, ['/runtime-config.js', '/nutrition/nutrition-core.js', '/nutrition/nutrition-api.js', '/nutrition/nutrition-views.js', '/nutrition/nutrition.js']);
+  assert.deepEqual(scripts, ['/runtime-config.js', '/table-cards.js', '/nutrition/nutrition-core.js', '/nutrition/nutrition-api.js', '/nutrition/nutrition-views.js', '/nutrition/nutrition.js']);
   for (const f of ['index.html', 'nutrition.js', 'nutrition-views.js', 'nutrition-api.js', 'nutrition-core.js']) {
     const src = read(f);
     assert.doesNotMatch(src, /\son[a-z]+\s*=\s*["'`]/i, f);

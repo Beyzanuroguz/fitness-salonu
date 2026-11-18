@@ -6,7 +6,7 @@
 const root = document.getElementById('gate-root');
 const esc = v => String(v ?? '').replace(/[&<>"']/g, x => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[x]));
 const $ = id => document.getElementById(id);
-const time = ms => new Date(ms).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+const time = ms => new Date(ms).toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
 const PREFIX = 'FORMCLUB-GATE:1:';
 const DIR = { in: 'Giriş', out: 'Çıkış' };
 
@@ -181,7 +181,7 @@ const Gate = {
       const r = await api('/api/turnstiles/scan', { method: 'POST', body: { code: this.pending.code, idempotency_key: this.pending.key } });
       this.pending = null;
       if (r.locker_warning) this.warning = r.locker_warning;
-      if (r.ok) this.show(true, `${DIR[r.direction].toUpperCase()} kaydedildi`, `${r.turnstile} · ${new Date(r.at).toLocaleTimeString('tr-TR')} · simülasyon`);
+      if (r.ok) this.show(true, `${DIR[r.direction].toUpperCase()} kaydedildi`, `${r.turnstile} · ${new Date(r.at).toLocaleTimeString('tr-TR', { timeZone: 'Europe/Istanbul' })} · simülasyon`);
       else this.show(false, 'Geçiş reddedildi', r.message);
       if (r.ok) this.stopCamera();
       this.load();

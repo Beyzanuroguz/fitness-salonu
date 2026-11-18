@@ -97,3 +97,28 @@
 .en-summary strong{font:800 22px Outfit,system-ui,sans-serif;color:#c4f56b}
 .small{font-size:12px}
 @media (prefers-reduced-motion:reduce){.fc-side{transition:none!important}}
+
+/* UI/UX V2: filters, compact page header and controls on phones. */
+.fc-filters{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:0 0 16px}
+.fc-filters .search{flex:1 1 240px;max-width:420px;margin:0}
+.fc-filter{display:inline-flex;align-items:center;gap:8px;margin:0;color:#a9b8ac;font-size:13px;font-weight:700}
+.fc-filter select{min-height:40px;max-width:100%;padding:6px 10px;border:1px solid #344235;border-radius:10px;background:#101713;color:#eaf0eb}
+.fc-filter select:focus-visible,.v6-form select:focus-visible{outline:3px solid #b6f548;outline-offset:2px}
+.fc-app .small{font-size:13px}
+.fc-app .panel h2{line-height:1.25}
+.fc-app .panel-title{flex-wrap:wrap;gap:10px}
+.fc-app .panel-title .toolbar{flex-wrap:wrap}
+@media (max-width:768px){
+  .fc-filters{gap:8px}
+  .fc-filters .search{flex:1 1 100%;max-width:none}
+  .fc-filter{flex:1 1 100%}
+  .fc-filter select{flex:1;min-height:44px;font-size:16px}
+  .fc-app .panel-title .toolbar .btn{min-height:40px;padding:8px 12px;font-size:13px}
+}
+@media (max-width:680px){
+  .fc-app .top{flex-direction:row;align-items:center;justify-content:space-between;flex-wrap:wrap}
+  .fc-app .top .toolbar{width:auto}
+  .fc-app .top .toolbar .btn,#install-app{min-height:40px;padding:8px 12px;font-size:13px}
+  #install-app{margin:0 0 12px}
+  .v6-form select{max-width:100%}
+}

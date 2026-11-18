@@ -1,22 +1,84 @@
 /* FORM CLUB virtual lockers (simulation). Builds on /turnstiles/turnstiles.css. */
-.locker-grid{grid-template-columns:repeat(auto-fill,minmax(210px,1fr))}
-.locker-card .qr{max-width:150px}
-.locker-card h2{font-size:18px;margin:0}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+/* Icon buttons: same size everywhere, 44px touch target on phones. */
+.icon-btn{display:inline-grid;place-items:center;width:40px;height:40px;flex:none;padding:0;border-radius:10px;border:1px solid #344235;background:#1b261d;color:var(--text);cursor:pointer;list-style:none}
+.icon-btn::-webkit-details-marker{display:none}
+.icon-btn svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.icon-btn svg circle{fill:currentColor;stroke:none}
+.icon-btn:hover{border-color:#4d6250;background:#223024}
+.icon-btn:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.icon-btn.primary{background:var(--accent);border-color:var(--accent);color:#0b100d}
+.btn.small{min-height:36px;padding:6px 12px;font-size:13px;border-radius:9px}
+/* Header */
+.lk-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 14px}
+.lk-head h1{margin:0;font-size:22px;line-height:1.2}
+.lk-toolbar{display:flex;gap:8px}
+/* Compact counters */
+.lk-stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin:0 0 14px}
+.lk-stat{display:flex;flex-direction:column;gap:2px;min-width:0;padding:9px 12px;border:1px solid var(--line);border-radius:12px;background:var(--card)}
+.lk-stat span{color:var(--muted);font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lk-stat strong{font-size:22px;line-height:1.1;color:var(--text)}
+.lk-stat.s-available strong{color:var(--ok)}.lk-stat.s-occupied strong{color:#9ecbff}.lk-stat.s-maintenance strong{color:var(--warn)}.lk-stat.s-inactive strong,.lk-stat.s-alerts strong{color:var(--bad)}
+/* Filter */
+.lk-filterbar{display:flex;align-items:center;gap:10px;margin:0 0 12px}
+.lk-filterbar label{color:var(--muted);font-size:13px;font-weight:700}
+.lk-filterbar select{min-height:38px;min-width:170px;padding:6px 34px 6px 12px;border-radius:10px;border:1px solid #3a4a3e;background:#0f1611;color:var(--text);font:600 14px inherit;font-family:inherit}
+.lk-filterbar select:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.lk-count{color:var(--muted);font-size:13px;margin-left:auto}
+.lk-alerts ul.log li{align-items:center}
+/* Cards */
+.locker-grid{grid-template-columns:repeat(auto-fill,minmax(232px,1fr));gap:12px}
+.locker-card{display:flex;flex-direction:column;padding:12px;margin:0}
+.lk-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+.lk-title{display:flex;flex-direction:column;align-items:flex-start;gap:4px;min-width:0}
+.lk-title h2{font-size:17px;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.lk-icons{display:flex;gap:4px;flex:none}
+.lk-icons .icon-btn{width:34px;height:34px;border-radius:9px}
+.lk-icons .icon-btn svg{width:18px;height:18px}
+.locker-card .qr{width:min(100%,156px);max-width:156px;margin:12px auto;padding:8px}
+.lk-card-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:auto;padding-top:10px;border-top:1px solid var(--line)}
+.lk-who{display:flex;flex-direction:column;min-width:0;font-size:13px}
+.lk-who b,.lk-who span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lk-who span{color:var(--muted);font-size:12px}
+.lk-card-foot .btn{flex:none}
 .pill.st-available{background:var(--ok-bg);color:var(--ok)}
 .pill.st-occupied{background:#1d2c3d;color:#9ecbff}
 .pill.st-maintenance{background:var(--warn-bg);color:var(--warn)}
 .pill.st-inactive{background:var(--bad-bg);color:var(--bad)}
-.pill.alert{background:var(--bad-bg);color:var(--bad);margin-left:4px}
+.pill.alert{background:var(--bad-bg);color:var(--bad)}
+.lk-title .pill+.pill{margin-top:-2px}
 .locker-card.st-inactive .qr,.locker-card.st-maintenance .qr{opacity:.4}
-.locker-card .who{min-height:38px;margin:6px 0}
-.locker-card .row .btn{flex:1 1 auto;min-height:40px;padding:8px 10px;font-size:13px}
-.stat.s-available strong{color:var(--ok)}.stat.s-occupied strong{color:#9ecbff}.stat.s-maintenance strong{color:var(--warn)}.stat.s-inactive strong{color:var(--bad)}
+/* "More" menu */
+.lk-menu{position:relative}
+.lk-menu-list{position:absolute;right:0;top:calc(100% + 6px);z-index:20;display:flex;flex-direction:column;min-width:176px;padding:6px;border:1px solid #3a4a3e;border-radius:12px;background:#151f18;box-shadow:0 12px 30px rgba(0,0,0,.45)}
+.lk-menu-item{min-height:40px;padding:8px 12px;border:0;border-radius:8px;background:transparent;color:var(--text);font:600 14px inherit;font-family:inherit;text-align:left;cursor:pointer}
+.lk-menu-item:hover,.lk-menu-item:focus-visible{background:#223024;outline:none}
+.lk-menu-item.danger{color:#ffc2b8}
+/* Notes (bottom, collapsed by default) */
+.lk-notes{padding:0}
+.lk-notes summary{cursor:pointer;padding:14px 16px;font-weight:700;color:#c3cfc5;list-style-position:inside}
+.lk-notes summary:focus-visible{outline:3px solid var(--accent);outline-offset:-3px;border-radius:16px}
+.lk-notes[open]{padding:0 0 2px}
+.lk-notes .notice{margin:0 14px 12px}
+/* Forms and member views */
 .form-card label{display:block;font-weight:700;margin:10px 0 4px}
 .form-card select,.form-card input,.form-card textarea{width:100%;min-height:44px;border-radius:10px;border:1px solid #3a4a3e;background:#0f1611;color:var(--text);padding:10px;font:inherit}
 .form-card textarea{min-height:70px;resize:vertical}
 .big{font-size:34px;font-weight:900;color:var(--accent);margin:4px 0}
 .warn{background:var(--warn-bg);color:var(--warn)}
-.filters{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 12px}
-.filters .btn{min-height:36px;padding:6px 12px;font-size:13px}
-.filters .btn[aria-pressed="true"]{background:var(--accent);color:#0b100d;border-color:var(--accent)}
-@media print{.locker-card .who,.locker-card .pill{display:none!important}.locker-grid{display:block}}
+@media(max-width:768px){
+  .lk-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .lk-stats .lk-stat:last-child{grid-column:1/-1}
+  .lk-filterbar select{flex:1 1 auto;min-width:0;min-height:44px;font-size:16px}
+  .lk-count{margin-left:0;white-space:nowrap}
+}
+@media(max-width:480px){
+  .lk-head h1{font-size:20px}
+  .icon-btn,.lk-icons .icon-btn{width:44px;height:44px}
+  .lk-toolbar{gap:6px}
+  .locker-grid{grid-template-columns:1fr}
+  .lk-alerts ul.log li{flex-direction:column;align-items:stretch}
+  .lk-card-foot .btn.small{min-height:44px}
+  .lk-menu-item{min-height:44px}
+}
+@media print{.lk-card-foot,.locker-card .pill,.lk-icons,.lk-notes,.lk-filterbar,.lk-alerts{display:none!important}.lk-title{align-items:center}}

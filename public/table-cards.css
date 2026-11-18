@@ -1,0 +1,20 @@
+/* FORM CLUB mobile table standard (with table-cards.js): at 768px and below each row becomes a card with
+   "label: value" lines. No page-level horizontal scroll; long names, dates and notes wrap. */
+@media (max-width:768px){
+  table.fc-stack{width:100%;min-width:0!important;white-space:normal!important;border-collapse:separate;border-spacing:0}
+  table.fc-stack caption{display:block;text-align:left}
+  table.fc-stack thead{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap}
+  table.fc-stack tbody,table.fc-stack tr,table.fc-stack td,table.fc-stack tbody th{display:block;width:auto}
+  table.fc-stack tbody th{padding:8px 0!important;border:0!important;border-bottom:1px solid rgba(148,170,152,.13)!important;text-align:left!important;white-space:normal!important;overflow-wrap:anywhere;font-weight:800}
+  table.fc-stack tr{margin:0 0 10px;padding:4px 12px;border:1px solid rgba(148,170,152,.24);border-radius:12px;background:rgba(255,255,255,.025)}
+  table.fc-stack tr:last-child{margin-bottom:0}
+  table.fc-stack td{position:relative;min-height:34px;padding:8px 0 8px calc(36% + 10px)!important;border:0!important;border-bottom:1px solid rgba(148,170,152,.13)!important;white-space:normal!important;overflow-wrap:anywhere;word-break:normal;text-align:left!important;font-size:14px;background:none!important}
+  table.fc-stack td:last-child{border-bottom:0!important}
+  table.fc-stack td::before{content:attr(data-label);position:absolute;left:0;top:8px;width:36%;color:#9fb0a2;font-size:12px;font-weight:700;line-height:1.35;overflow-wrap:anywhere}
+  table.fc-stack td.fc-full,table.fc-stack td[data-label=""]{padding-left:0!important}
+  table.fc-stack td.fc-full::before,table.fc-stack td[data-label=""]::before{display:none}
+  table.fc-stack td .btn,table.fc-stack td button{max-width:100%}
+  .table-wrap:has(>table.fc-stack),.fc-table-wrap:has(>table.fc-stack){overflow:visible;max-height:none}
+  /* Opted-out wide tables scroll inside their own box, never the page. */
+  .table-wrap,.fc-table-wrap{max-width:100%;-webkit-overflow-scrolling:touch}
+}

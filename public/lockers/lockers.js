@@ -5,8 +5,8 @@
 'use strict';
 const root = document.getElementById('locker-root');
 const esc = v => String(v ?? '').replace(/[&<>"']/g, x => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[x]));
-const time = ms => new Date(ms).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-const clock = ms => new Date(ms).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+const time = ms => new Date(ms).toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+const clock = ms => new Date(ms).toLocaleTimeString('tr-TR', { timeZone: 'Europe/Istanbul', hour: '2-digit', minute: '2-digit' });
 const PREFIX = 'FORMCLUB-LOCKER:1:', GATE_PREFIX = 'FORMCLUB-GATE:1:';
 const SIM = '<div class="notice sim" role="note"><b>SİMÜLASYON</b>Bu sürüm sanal dolap kaydı tutar; gerçek kilit açılmaz. Dolap QR kodu kişisel veri veya kilit açma yetkisi taşımaz.</div>';
 const key = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2, 12));
@@ -50,6 +50,20 @@ const FORMS = {
   assign: ['Üye ata', 'Ata'], release: ['Dolabı manuel boşalt', 'Boşalt'], maintenance: ['Bakıma al', 'Bakıma al'],
   inactive: ['Pasif yap', 'Pasif yap'], available: ['Kullanıma aç', 'Kullanıma aç'], rotate: ['QR kimliğini yenile', 'Yenile'], resolve: ['Uyarıyı kapat', 'Kapat']
 };
+// Per state: the one action shown on the card, and everything in its "more" menu.
+const MAIN = { available: 'assign', occupied: 'release', maintenance: 'available', inactive: 'available' };
+const MENU = { available: ['assign', 'maintenance', 'inactive'], occupied: ['release'], maintenance: ['available', 'inactive'], inactive: ['available', 'maintenance'] };
+const svg = d => `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">${d}</svg>`;
+const ICON = {
+  print: svg('<path d="M7 9V3h10v6"/><path d="M7 18H5a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M7 14h10v7H7z"/>'),
+  refresh: svg('<path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/>'),
+  plus: svg('<path d="M12 5v14M5 12h14"/>'),
+  rotate: svg('<path d="M4 4h5v5H4zM15 4h5v5h-5zM4 15h5v5H4z"/><path d="M20 15.5a4.5 4.5 0 1 1-1.3-3.2"/><path d="M20 11.5v3h-3"/>'),
+  more: svg('<circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/>')
+};
+const iconBtn = (act, icon, label, title, attrs = '', cls = '') => `<button type="button" class="icon-btn${cls}" data-act="${act}" ${attrs} aria-label="${esc(label)}" title="${esc(title)}">${icon}</button>`;
+// "Dolap 1" is shown as "Dolap 01" on cards; stored names and logs stay unchanged.
+const cardName = label => label.replace(/^Dolap (\d)$/, 'Dolap 0$1');
 const Admin = {
   data: null, error: '', notice: '', form: null, filter: 'all', timer: 0, addKey: null,
   async start() { await this.load(); this.timer = setInterval(() => { if (!document.hidden && !this.form) this.load(); }, 15000); },
@@ -77,51 +91,45 @@ const Admin = {
     if (f) { const r = document.getElementById('lf-reason'), m = document.getElementById('lf-member'); if (r) f.reason = r.value; if (m) f.member = Number(m.value || 0); }
     if (!d) { root.innerHTML = `<div class="wrap">${this.error ? `<div class="notice bad" role="alert"><b>Dolaplar yüklenemedi</b>${esc(this.error)}</div><button class="btn" data-act="reload">Tekrar dene</button>` : '<p class="boot">Yükleniyor…</p>'}</div>`; return; }
     const c = d.counts, list = d.lockers.filter(l => this.filter === 'all' || l.state === this.filter);
-    const stat = (k, label) => `<div class="stat s-${k}"><span class="muted small">${label}</span><strong>${c[k]}</strong></div>`;
-    const filt = (k, label) => `<button class="btn" data-act="filter" data-f="${k}" aria-pressed="${this.filter === k}">${label}</button>`;
+    const stat = (k, label, n = c[k]) => `<div class="lk-stat s-${k}"><span>${label}</span><strong>${n}</strong></div>`;
+    const opt = (k, label, n) => `<option value="${k}"${this.filter === k ? ' selected' : ''}>${label} (${n})</option>`;
     const card = l => {
-      const act = (kind, text, cls = '') => `<button class="btn ${cls}" data-act="form" data-kind="${kind}" data-id="${l.id}">${text}</button>`;
-      const actions = [
-        `<button class="btn" data-act="print" data-id="${l.id}">Yazdır</button>`,
-        l.state === 'available' ? act('assign', 'Üye ata') : '',
-        l.state === 'occupied' ? act('release', 'Manuel boşalt', 'danger') : '',
-        l.state === 'available' ? act('maintenance', 'Bakıma al') : '',
-        l.state === 'available' ? act('inactive', 'Pasif yap') : '',
-        l.state === 'maintenance' || l.state === 'inactive' ? act('available', 'Kullanıma aç') : '',
-        act('rotate', 'QR yenile', 'danger')
-      ].join('');
+      const name = esc(l.label), menu = MENU[l.state].map(k => `<button type="button" class="lk-menu-item${k === 'release' ? ' danger' : ''}" data-act="form" data-kind="${k}" data-id="${l.id}">${FORMS[k][0]}</button>`).join('');
+      const main = MAIN[l.state];
       return `<section class="card gate-card locker-card st-${l.state}" id="gate-${l.id}" aria-labelledby="lk-h-${l.id}">
-        <div class="row" style="justify-content:space-between"><h2 id="lk-h-${l.id}">${esc(l.label)}</h2><span><span class="pill st-${l.state}">${esc(l.state_label)}</span>${l.alert ? '<span class="pill alert">Uyarı</span>' : ''}</span></div>
+        <header class="lk-card-head"><div class="lk-title"><h2 id="lk-h-${l.id}">${esc(cardName(l.label))}</h2><span class="pill st-${l.state}">${esc(l.state_label)}</span>${l.alert ? '<span class="pill alert">Uyarı</span>' : ''}</div>
+          <div class="lk-icons no-print">${iconBtn('print', ICON.print, `${name} QR kodunu yazdır`, 'Yazdır', `data-id="${l.id}"`)}${iconBtn('form', ICON.rotate, `${name} QR kimliğini yenile`, 'QR yenile', `data-kind="rotate" data-id="${l.id}"`)}
+          <details class="lk-menu"><summary class="icon-btn" aria-label="${name} için diğer işlemler" title="Diğer işlemler">${ICON.more}</summary><div class="lk-menu-list">${menu}</div></details></div></header>
         <div class="qr">${qrSvg(l.qr)}</div>
-        <p class="muted small who print-hide">${l.assignment ? `<b>${esc(l.assignment.member)}</b><br>${esc(time(l.assignment.since))} · ${l.assignment.source === 'admin' ? 'yönetici atadı' : 'üye aldı'}` : 'Atanmış üye yok'}</p>
-        <p class="code print-hide">Kod yenilendi: ${esc(time(l.code_rotated_at))}</p>
-        <div class="row no-print">${actions}</div></section>`;
+        <footer class="lk-card-foot print-hide"><div class="lk-who">${l.assignment ? `<b title="${esc(l.assignment.member)}">${esc(l.assignment.member)}</b><span>${esc(time(l.assignment.since))} · ${l.assignment.source === 'admin' ? 'yönetici atadı' : 'üye aldı'}</span>` : '<b class="muted">Atanmamış</b><span>Kod yenilendi: ' + esc(time(l.code_rotated_at)) + '</span>'}</div>
+          <button type="button" class="btn small${main === 'release' ? ' danger' : ''} no-print" data-act="form" data-kind="${main}" data-id="${l.id}">${FORMS[main][0]}</button></footer></section>`;
     };
     const ev = d.events.map(e => `<tr><td>${esc(time(e.at))}</td><td>${esc(e.locker || '—')}</td><td>${esc(e.member || '—')}</td><td>${esc(e.action_label)}${e.detail ? ` <span class="muted small">(${esc(e.detail)})</span>` : ''}</td><td>${e.result === 'ok' ? 'Tamam' : '<span class="rej">Reddedildi</span>'}</td><td>${esc(e.actor || '')} <span class="muted small">${e.actor_role === 'admin' ? 'yönetici' : 'üye'}</span></td><td class="reason">${esc(e.message || e.note || '')}</td></tr>`).join('');
-    root.innerHTML = `<div class="wrap">
-  <h1 class="no-print">Dolap Yönetimi</h1>
-  ${SIM}
-  ${d.ephemeral ? '<div class="notice info" role="note"><b>Demo ortamı</b>Sunucu yeniden başlayınca (uyku, yeniden dağıtım) dolap QR kimlikleri, tahsisler ve tüm dolap kayıtları sıfırlanır. Basılı demo kodlarını her oturumda bu ekrandan yeniden yazdırın.</div>' : ''}
-  <div class="notice info" role="note"><b>Güvenlik sınırı</b>Dolap kodu sabittir ve kopyalanabilir. Üye yalnızca turnikeden giriş yaptıktan sonra dolap alabilir; aynı anda bir üyeye bir dolap, bir dolaba bir üye düşer. Kod sızarsa “QR yenile” ile eskisini geçersiz kılın.</div>
+    root.innerHTML = `<div class="wrap lk-admin">
+  <div class="lk-head"><h1>Dolap Yönetimi</h1><div class="lk-toolbar no-print" role="group" aria-label="Dolap işlemleri">${iconBtn('print-all', ICON.print, 'Tüm QR kodlarını yazdır', 'Tüm QR kodlarını yazdır')}${iconBtn('reload', ICON.refresh, 'Listeyi yenile', 'Listeyi yenile')}${iconBtn('add', ICON.plus, 'Dolap ekle', 'Yeni dolap ekle', '', ' primary')}</div></div>
   ${this.error ? `<div class="notice bad" role="alert">Son işlem başarısız: ${esc(this.error)}</div>` : ''}
   ${this.notice ? `<div class="notice ok" role="status">${esc(this.notice)}</div>` : ''}
-  <div class="stats no-print">${stat('available', 'Boş')}${stat('occupied', 'Dolu')}${stat('maintenance', 'Bakımda')}${stat('inactive', 'Pasif')}<div class="stat"><span class="muted small">Açık uyarı</span><strong>${d.alerts.length}</strong></div></div>
   ${this.formHtml()}
-  ${d.alerts.length ? `<section class="card" aria-labelledby="al-h"><h2 id="al-h">Uyarılar: dolapla çıkış</h2><ul class="log">${d.alerts.map(a => `<li><span>${esc(a.message)}<br><span class="muted small">${esc(time(a.at))} · şu an ${a.inside ? 'içeride' : 'dışarıda'}</span></span><button class="btn" data-act="form" data-kind="resolve" data-id="${a.id}">Uyarıyı kapat</button></li>`).join('')}</ul></section>` : ''}
-  <div class="row no-print" style="margin-bottom:12px"><button class="btn primary" data-act="add">Dolap ekle</button><button class="btn" data-act="print-all">Tüm QR kodlarını yazdır</button><button class="btn" data-act="reload">Yenile</button></div>
-  <div class="filters no-print" role="group" aria-label="Dolap filtresi">${filt('all', 'Tümü')}${filt('available', 'Boş')}${filt('occupied', 'Dolu')}${filt('maintenance', 'Bakımda')}${filt('inactive', 'Pasif')}</div>
+  <div class="lk-stats no-print">${stat('available', 'Boş')}${stat('occupied', 'Dolu')}${stat('maintenance', 'Bakımda')}${stat('inactive', 'Pasif')}${stat('alerts', 'Açık uyarı', d.alerts.length)}</div>
+  ${d.alerts.length ? `<section class="card lk-alerts" aria-labelledby="al-h"><h2 id="al-h">Uyarılar: dolapla çıkış</h2><ul class="log">${d.alerts.map(a => `<li><span>${esc(a.message)}<br><span class="muted small">${esc(time(a.at))} · şu an ${a.inside ? 'içeride' : 'dışarıda'}</span></span><button class="btn small" data-act="form" data-kind="resolve" data-id="${a.id}">Uyarıyı kapat</button></li>`).join('')}</ul></section>` : ''}
+  <div class="lk-filterbar no-print"><label for="lk-filter">Durum</label><select id="lk-filter">${opt('all', 'Tümü', d.lockers.length)}${opt('available', 'Boş', c.available)}${opt('occupied', 'Dolu', c.occupied)}${opt('maintenance', 'Bakımda', c.maintenance)}${opt('inactive', 'Pasif', c.inactive)}</select><span class="lk-count" role="status" aria-live="polite">${list.length} dolap</span></div>
   <div class="grid locker-grid">${list.map(card).join('') || '<p class="muted">Bu filtrede dolap yok.</p>'}</div>
   <section class="card"><h2>Dolap işlem kayıtları</h2>${ev ? `<div class="table-wrap"><table><thead><tr><th>Zaman</th><th>Dolap</th><th>Üye</th><th>İşlem</th><th>Sonuç</th><th>Aktör</th><th>Sebep / not</th></tr></thead><tbody>${ev}</tbody></table></div>` : '<p class="muted">Henüz kayıt yok.</p>'}</section>
+  <details class="card lk-notes no-print"><summary>Bilgilendirme ve Güvenlik Notları</summary>
+    <div class="notice sim" role="note"><b>SİMÜLASYON</b>Bu sürüm sanal dolap kaydı tutar; gerçek kilit açılmaz. Dolap QR kodu kişisel veri veya kilit açma yetkisi taşımaz.</div>
+    ${d.ephemeral ? '<div class="notice info" role="note"><b>Demo ortamı</b>Sunucu yeniden başlayınca (uyku, yeniden dağıtım) dolap QR kimlikleri, tahsisler ve tüm dolap kayıtları sıfırlanır. Basılı demo kodlarını her oturumda bu ekrandan yeniden yazdırın.</div>' : ''}
+    <div class="notice info" role="note"><b>Güvenlik sınırı</b>Dolap kodu sabittir ve kopyalanabilir. Üye yalnızca turnikeden giriş yaptıktan sonra dolap alabilir; aynı anda bir üyeye bir dolap, bir dolaba bir üye düşer. Kod sızarsa “QR yenile” ile eskisini geçersiz kılın.</div>
+  </details>
 </div>`;
   },
   async act(t) {
     const a = t.dataset.act, id = Number(t.dataset.id);
+    if (a === 'print-all' && this.filter !== 'all') { this.filter = 'all'; this.render(); }
     if (a === 'print' || a === 'print-all') {
       document.body.classList.toggle('print-one', a === 'print');
       document.querySelectorAll('.gate-card').forEach(c => c.classList.toggle('print-target', c.id === 'gate-' + id));
       return window.print();
     }
-    if (a === 'filter') { this.filter = t.dataset.f; return this.render(); }
     if (a === 'form') { this.form = { kind: t.dataset.kind, id, key: key(), assignment: this.data.lockers.find(l => l.id === id)?.assignment?.id }; this.notice = ''; this.render(); document.getElementById('locker-form')?.scrollIntoView?.({ block: 'start' }); return; }
     if (a === 'form-cancel') { this.form = null; return this.render(); }
     if (a === 'add') {
@@ -262,12 +270,19 @@ const Member = {
   }
 };
 
+root.addEventListener('change', ev => {
+  if (ev.target.id === 'lk-filter') { Admin.filter = ev.target.value; Admin.render(); document.getElementById('lk-filter')?.focus(); }
+});
+// Only one "more" menu open at a time; outside click or Escape closes it.
+const closeMenus = keep => document.querySelectorAll?.('details.lk-menu[open]').forEach(m => { if (m !== keep) m.open = false; });
+document.addEventListener('keydown', ev => { if (ev.key === 'Escape') { const open = document.querySelector?.('details.lk-menu[open]'); if (open) { open.open = false; open.querySelector('summary')?.focus(); } } });
 root.addEventListener('click', ev => {
+  closeMenus(ev.target.closest?.('details.lk-menu'));
   const t = ev.target.closest('[data-act]'); if (!t || t.disabled) return;
   const a = t.dataset.act;
   if (a === 'retry-boot') return boot();
   if (a === 'reload') { Admin.notice = ''; return Admin.load(); }
-  if (['print', 'print-all', 'filter', 'form', 'form-cancel', 'form-ok', 'add'].includes(a)) return Admin.act(t);
+  if (['print', 'print-all', 'form', 'form-cancel', 'form-ok', 'add'].includes(a)) return Admin.act(t);
   if (a === 'cam-start') return Member.cam.start();
   if (a === 'cam-stop') { Member.cam.stop(); return Member.render(); }
   if (a === 'resend') return Member.send();

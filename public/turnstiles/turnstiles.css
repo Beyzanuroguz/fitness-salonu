@@ -46,9 +46,26 @@ td.reason{white-space:normal;min-width:180px}
 ul.log{list-style:none;margin:0;padding:0}
 ul.log li{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
 @media(max-width:480px){.wrap{padding:12px}.btn{flex:1 1 auto}}
+/* Embedded in the app shell, which already shows the page title. */
+.embedded .wrap>h1.no-print,.embedded .lk-head h1{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.embedded .lk-head{justify-content:flex-end}
+/* QR printing (turnstiles and lockers): one code ~8 x 8 cm with a large name below it;
+   "print all" lays out 6 codes per A4 page (2 x 3, ~6.2 cm each). White quiet zone kept around every code. */
+@page{size:A4;margin:12mm}
 @media print{
-  body{background:#fff;color:#000}.no-print,.notice,.stats,.card:not(.gate-card){display:none!important}
-  .grid{display:block}.gate-card{break-inside:avoid;page-break-after:always;border:0;background:#fff;color:#000;text-align:center}
-  .gate-card .qr{max-width:none;width:12cm}.gate-card h2{font-size:32px}.print-hide{display:none!important}
+  html,body,.embedded body{background:#fff!important;color:#000!important}
+  .no-print,.notice,.stats,.card:not(.gate-card),.print-hide,h1{display:none!important}
+  .wrap{max-width:none;margin:0;padding:0}
+  .grid{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));gap:6mm 8mm}
+  .gate-card{display:flex!important;flex-direction:column;align-items:center;justify-content:center;height:84mm;margin:0;padding:3mm;border:0!important;border-radius:0;background:#fff!important;color:#000!important;box-shadow:none;break-inside:avoid;page-break-inside:avoid;text-align:center}
+  .gate-card .qr{order:1;width:62mm!important;height:62mm;max-width:none!important;margin:0!important;padding:3mm;border-radius:0;background:#fff;opacity:1!important}
+  .gate-card .qr svg{width:100%;height:100%}
+  .gate-card>.row,.gate-card .lk-card-head{order:2;display:flex;justify-content:center;margin-top:3mm}
+  .gate-card h2,.gate-card .lk-title h2{margin:0;font-size:22pt!important;line-height:1.1;color:#000!important;white-space:normal;overflow:visible;max-width:none}
+  .gate-card .muted,.gate-card .pill{display:none!important}
   body.print-one .gate-card:not(.print-target){display:none!important}
+  body.print-one .grid{display:block!important}
+  body.print-one .gate-card{height:auto;padding-top:25mm}
+  body.print-one .gate-card .qr{width:84mm!important;height:84mm;padding:2mm}
+  body.print-one .gate-card h2,body.print-one .gate-card .lk-title h2{font-size:36pt!important;margin-top:4mm}
 }
