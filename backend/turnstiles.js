@@ -3,7 +3,8 @@
 // The QR holds only a public gate identifier: no member data and no pass authority. A pass needs a
 // signed-in member session; the server decides entry or exit from the member's stored presence.
 // Nothing here opens a door, drives a relay or talks to hardware (that is TURNSTILE_ENABLED, separate).
-const { randomBytes } = require('node:crypto');
+const rejectedScans = require('./qr-rejections');
+const { randomBytes, createHash } = require('node:crypto');
 const { createLimiter } = require('./security');
 const PREFIX = 'FORMCLUB-GATE:1:';
 const today = now => new Date(now).toLocaleDateString('en-CA', { timeZone: 'Europe/Istanbul' });
@@ -30,6 +31,15 @@ module.exports = function createTurnstiles(db, { clock = Date.now, cooldownMs = 
     idempotency_key TEXT NOT NULL, created_at INTEGER NOT NULL, UNIQUE(user_id, idempotency_key));
   CREATE INDEX IF NOT EXISTS gate_events_time ON gate_events(created_at);
   CREATE INDEX IF NOT EXISTS gate_events_member ON gate_events(member_id, created_at);`);
+  if (!db.prepare('PRAGMA table_info(gate_events)').all().some(c => c.name === 'request_fp')) {
+    db.exec('ALTER TABLE gate_events ADD COLUMN request_fp TEXT');
+  }
+  db.exec('CREATE INDEX IF NOT EXISTS gate_rejected_scan ON gate_events(user_id, request_fp, created_at) WHERE reason IS NOT NULL');
+  const replays = rejectedScans(db, 'gate');
+  const eventById = db.prepare('SELECT * FROM gate_events WHERE id=?');
+  const recentRejection = db.prepare(`SELECT * FROM gate_events
+    WHERE user_id=? AND member_id=? AND request_fp=? AND reason=? AND turnstile_id IS ? AND direction IS ? AND created_at>?
+    ORDER BY created_at DESC LIMIT 1`);
   const add = db.prepare('INSERT OR IGNORE INTO gate_turnstiles(id,name,code,active,code_rotated_at) VALUES(?,?,?,1,?)');
   for (const id of [1, 2, 3]) add.run(id, 'Turnike ' + id, newCode(), clock());
 
@@ -55,14 +65,24 @@ module.exports = function createTurnstiles(db, { clock = Date.now, cooldownMs = 
     if (typeof body.code !== 'string' || body.code.length > 200) fail('Geçersiz QR');
     limit('gate:' + u.id);
     const now = clock(), raw = body.code.trim();
+    const fp = createHash('sha256').update(raw).digest('hex');
     db.exec('BEGIN IMMEDIATE');
     try {
       // Retried request (network drop, double tap): return the stored outcome, never a second pass.
-      const seen = db.prepare('SELECT * FROM gate_events WHERE user_id=? AND idempotency_key=?').get(u.id, key);
-      if (seen) { db.exec('COMMIT'); return { ...outcome(seen), replayed: true }; }
+      const alias = replays.find(u.id, key);
+      const seen = alias ? eventById.get(alias.event_id) : db.prepare('SELECT * FROM gate_events WHERE user_id=? AND idempotency_key=?').get(u.id, key);
+      if (seen) {
+        if (seen.request_fp && seen.request_fp !== fp) fail('İstek anahtarı başka bir işlemde kullanıldı', 409);
+        db.exec('COMMIT');
+        return { ...outcome(seen), replayed: true };
+      }
       const record = (turnstile, direction, reason) => {
-        const id = Number(db.prepare(`INSERT INTO gate_events(member_id,user_id,turnstile_id,direction,result,reason,idempotency_key,created_at)
-          VALUES(?,?,?,?,?,?,?,?)`).run(u.member_id, u.id, turnstile, direction, reason ? 'rejected' : 'ok', reason, key, now).lastInsertRowid);
+        if (reason) {
+          const recent = recentRejection.get(u.id, u.member_id, fp, reason, turnstile, direction, now - 60000);
+          if (recent) return replays.link(u.id, key, recent);
+        }
+        const id = Number(db.prepare(`INSERT INTO gate_events(member_id,user_id,turnstile_id,direction,result,reason,idempotency_key,created_at,request_fp)
+          VALUES(?,?,?,?,?,?,?,?,?)`).run(u.member_id, u.id, turnstile, direction, reason ? 'rejected' : 'ok', reason, key, now, fp).lastInsertRowid);
         return db.prepare('SELECT * FROM gate_events WHERE id=?').get(id);
       };
       let event;

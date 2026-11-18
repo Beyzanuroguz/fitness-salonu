@@ -294,7 +294,15 @@ async function requestWakeLock() {
 function releaseWakeLock() { try { wakeLock?.release(); } catch {} wakeLock = null; }
 
 /* ---------- Staff scanner ---------- */
-let stream = null, detector = null, loopTimer = 0, canvas = null, resumeTimer = 0;
+let resumeTimer = 0;
+const entryCamera = window.FormclubQrCamera.create({
+  videoId: 'scan-video',
+  accepts: K.isToken,
+  repeatMs: 60000,
+  busy: () => S.scan.busy,
+  onCode: submitToken,
+  onChange: syncEntryCamera
+});
 function scanView() {
   const s = S.scan;
   const secure = window.isSecureContext;
@@ -328,15 +336,6 @@ function permissionSteps() {
   return 'Adres çubuğundaki kilit veya kamera simgesinden bu site için kameraya izin ver, ardından “Tekrar dene”ye bas.';
 }
 // Map getUserMedia failures to actionable Turkish messages.
-function cameraError(e) {
-  const name = e?.name || '';
-  if (name === 'NotAllowedError' || name === 'PermissionDeniedError') return ['Kamera izni verilmedi.', permissionSteps()];
-  if (name === 'SecurityError') return ['Kamera bu sayfada engellendi.', 'Sayfayı HTTPS adresinden aç. Uygulama içinde açıksan ana sayfadan yeniden dene.'];
-  if (name === 'NotFoundError' || name === 'DevicesNotFoundError') return ['Bu cihazda kamera bulunamadı.', 'Kodu aşağıya elle veya USB okuyucuyla girebilirsin.'];
-  if (name === 'NotReadableError' || name === 'TrackStartError') return ['Kamera başka bir uygulama tarafından kullanılıyor.', 'Kamerayı kullanan uygulamayı kapatıp “Tekrar dene”ye dokun.'];
-  if (name === 'AbortError') return ['Kamera başlatılamadı.', 'Birkaç saniye sonra tekrar dene.'];
-  return ['Kamera açılamadı: ' + (e?.message || name || e), ''];
-}
 async function checkCameraPermission() {
   try {
     const status = await navigator.permissions?.query({ name: 'camera' });
@@ -346,71 +345,23 @@ async function checkCameraPermission() {
     status.onchange = apply;
   } catch {} // Safari and Firefox may not expose the camera permission name.
 }
-async function startCamera() {
-  S.scan.error = ''; S.scan.errorHelp = ''; S.scan.starting = true; updateScanUI();
-  const ask = video => navigator.mediaDevices.getUserMedia({ video, audio: false });
-  try {
-    try { stream = await ask({ facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }); }
-    catch (e) { if (e?.name === 'OverconstrainedError' || e?.name === 'ConstraintNotSatisfiedError') stream = await ask(true); else throw e; }
-  } catch (e) {
-    [S.scan.error, S.scan.errorHelp] = cameraError(e);
-    if (e?.name === 'NotAllowedError') S.scan.permission = 'denied';
-    S.scan.starting = false;
-    return S.view === 'scan' ? render() : undefined;
+function syncEntryCamera(error) {
+  const cam = entryCamera, s = S.scan;
+  Object.assign(s, { active: cam.active, starting: cam.starting, error: cam.error, errorHelp: cam.help });
+  if (error?.name === 'NotAllowedError') s.permission = 'denied';
+  if (cam.active) {
+    s.permission = 'granted';
+    s.engine = cam.detector ? 'native' : 'js';
+    s.torchOn = false;
+    try { s.torch = !!cam.stream.getVideoTracks()[0]?.getCapabilities?.().torch; } catch { s.torch = false; }
   }
-  if (S.view !== 'scan') { stream.getTracks().forEach(t => t.stop()); stream = null; S.scan.starting = false; return; }
-  await setupDetector();
-  S.scan.permission = 'granted'; S.scan.starting = false; S.scan.torchOn = false;
-  try { S.scan.torch = !!stream.getVideoTracks()[0]?.getCapabilities?.().torch; } catch { S.scan.torch = false; }
-  S.scan.active = true;
-  render();
+  updateScanUI();
 }
-async function setupDetector() {
-  detector = null;
-  try {
-    if ('BarcodeDetector' in window && (await window.BarcodeDetector.getSupportedFormats()).includes('qr_code')) {
-      detector = new window.BarcodeDetector({ formats: ['qr_code'] });
-      S.scan.engine = 'native';
-      return;
-    }
-  } catch {}
-  S.scan.engine = 'js';
-  if (!window.jsQR) await new Promise((resolve, reject) => { const s = document.createElement('script'); s.src = '/v9/vendor/jsQR.js'; s.onload = resolve; s.onerror = () => reject(Error('QR çözücü yüklenemedi')); document.head.appendChild(s); }).catch(e => { S.scan.error = e.message; });
-}
-function attachStream() {
-  const video = $('scan-video');
-  if (!video || !stream) return;
-  video.srcObject = stream;
-  video.play().catch(() => {});
-  clearTimeout(loopTimer);
-  loopTimer = setTimeout(scanFrame, 300);
-}
-async function scanFrame() {
-  const video = $('scan-video');
-  if (!S.scan.active || !video || document.hidden) return;
-  if (!S.scan.busy && video.readyState >= 2) {
-    let text = '';
-    try {
-      if (detector) {
-        const codes = await detector.detect(video);
-        text = codes[0]?.rawValue || '';
-      } else if (window.jsQR) {
-        const w = Math.min(640, video.videoWidth), h = Math.round(video.videoHeight * w / video.videoWidth);
-        canvas = canvas || document.createElement('canvas');
-        canvas.width = w; canvas.height = h;
-        const ctx = canvas.getContext('2d', { willReadFrequently: true });
-        ctx.drawImage(video, 0, 0, w, h);
-        text = window.jsQR(ctx.getImageData(0, 0, w, h).data, w, h, { inversionAttempts: 'dontInvert' })?.data || '';
-      }
-    } catch {}
-    if (text) await submitToken(text);
-  }
-  loopTimer = setTimeout(scanFrame, 200);
-}
+function attachStream() { entryCamera.attach(); }
 function stopCamera() {
-  clearTimeout(loopTimer); clearTimeout(resumeTimer);
-  stream?.getTracks().forEach(t => t.stop());
-  stream = null; S.scan.active = false; S.scan.busy = false;
+  clearTimeout(resumeTimer);
+  entryCamera.stop();
+  Object.assign(S.scan, { active: false, starting: false, busy: false });
 }
 async function submitToken(raw) {
   const token = String(raw || '').trim();
@@ -627,11 +578,11 @@ root.addEventListener('click', async ev => {
     case 'install-top': case 'install-banner': case 'install-more': return promptInstall();
     case 'install-dismiss': store.set('install-dismissed', '1'); return render();
     case 'sw-update': S.sw.waiting?.postMessage({ type: 'SKIP_WAITING' }); return;
-    case 'cam-start': t.disabled = true; return startCamera();
+    case 'cam-start': t.disabled = true; return entryCamera.start();
     case 'qr-big': S.qrBig = !S.qrBig; render(); return $('qr-big')?.focus();
     case 'cam-stop': stopCamera(); return render();
     case 'cam-torch': {
-      const track = stream?.getVideoTracks()[0];
+      const track = entryCamera.stream?.getVideoTracks()[0];
       try { await track.applyConstraints({ advanced: [{ torch: !S.scan.torchOn }] }); S.scan.torchOn = !S.scan.torchOn; }
       catch { S.scan.torch = false; toast('Fener bu cihazda kullanılamıyor.', true); }
       return updateScanUI();
@@ -660,7 +611,7 @@ document.addEventListener('visibilitychange', () => {
   if (!S.user) return;
   if (document.hidden) {
     if (S.view === 'qr') { clearTimeout(qrTimer); releaseWakeLock(); }
-    if (S.view === 'scan' && S.scan.active) { stopCamera(); render(); }
+    if (S.view === 'scan' && (S.scan.active || S.scan.starting)) { stopCamera(); render(); }
     return;
   }
   if (S.view === 'qr') startQR();

@@ -35,13 +35,14 @@ navItems.member.push(['notifications','◉','Bildirimler']);
 for(const r of ['admin','member','teacher'])navItems[r].push(['energy','◎','Kalori hedefim']);
 // Virtual turnstiles (simulation): admin manages gate QR codes, members scan them with the phone camera.
 navItems.admin.push(['turnstiles','⇆','Turnikeler']);navItems.member.push(['gate','⇆','Turnike QR Tara']);
-// Virtual lockers V1 (simulation): admin manages lockers; members scan a locker QR after a turnstile entry.
-navItems.admin.push(['lockers','▦','Dolap Yönetimi']);navItems.member.push(['lockerScan','▦','Dolap QR Tara'],['locker','▣','Dolabım']);
+// Personal locker screens share the same role-aware desktop sidebar and mobile drawer.
+navItems.admin.push(['lockers','▦','Dolap Yönetimi']);
+for(const r of ['admin','teacher','member'])navItems[r].push(['lockerScan','▦','Dolap QR Tara'],['locker','▣','Dolabım']);
 // Menu sections per role. Every navItems entry belongs to exactly one section (checked by tests).
 const navGroups={
- admin:[['Genel',['overview','insights','reports']],['Üyeler',['members','renewals','leads']],['Dersler',['classes','reservations','attendance']],['Giriş ve bildirimler',['scan','turnstiles','lockers','notifications']],['Ekip',['trainers','performance']],['İletişim',['announcements','community']],['Finans',['payments']],['Beslenme',['nutrition','energy']],['Yönetim',['settings']]],
+ admin:[['Genel',['overview','insights','reports']],['Üyeler',['members','renewals','leads']],['Dersler',['classes','reservations','attendance']],['Giriş ve bildirimler',['scan','turnstiles','lockers','lockerScan','locker','notifications']],['Ekip',['trainers','performance']],['İletişim',['announcements','community']],['Finans',['payments']],['Beslenme',['nutrition','energy']],['Yönetim',['settings']]],
  member:[['Genel',['home','gate','lockerScan','locker']],['Dersler',['lessons','memberCalendar','entry']],['Sağlık ve beslenme',['nutrition','energy','progress']],['Topluluk',['community','notifications']],['Hesap',['profile']]],
- teacher:[['Genel',['today']],['Dersler',['calendar','attendance','students']],['Performans',['performance']],['Topluluk',['community','notifications']],['Sağlık',['energy']],['Hesap',['profile']]]
+ teacher:[['Genel',['today','lockerScan','locker']],['Dersler',['calendar','attendance','students']],['Performans',['performance']],['Topluluk',['community','notifications']],['Sağlık',['energy']],['Hesap',['profile']]]
 };
 const roleNames={admin:'Yönetici',member:'Üye',teacher:'Eğitmen'};
 const titles={overview:'Salonun nabzı',members:'Üye yönetimi',leads:'Müşteri adayları',classes:'Ders programı',payments:'Ödemeler',trainers:'Eğitmenler',announcements:'Duyurular',reports:'Raporlar',home:'Merhaba, '+(selected()?.name.split(' ')[0]||'Üye'),lessons:'Dersler',entry:'Telefonla giriş',progress:'Gelişimin',profile:'Profil',today:'Günün dersleri',calendar:'Ders takvimi',students:'Katılımcılar',memberCalendar:'Ders takvimi',nutrition:'Beslenme günlüğü',community:'Topluluk',insights:'Analitik',settings:'Salon ayarları',energy:'Kalori hedefim'};

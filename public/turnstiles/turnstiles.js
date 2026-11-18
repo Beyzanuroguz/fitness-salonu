@@ -7,7 +7,6 @@ const root = document.getElementById('gate-root');
 const esc = v => String(v ?? '').replace(/[&<>"']/g, x => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[x]));
 const $ = id => document.getElementById(id);
 const time = ms => new Date(ms).toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
-const PREFIX = 'FORMCLUB-GATE:1:';
 const DIR = { in: 'Giriş', out: 'Çıkış' };
 
 async function api(path, options = {}) {
@@ -94,20 +93,16 @@ const Admin = {
 
 /* ---------- Member gate scanner ---------- */
 const Gate = {
-  me: null, error: '', warning: null, cam: { active: false, starting: false, error: '', help: '' }, result: null, busy: false,
-  last: '', lastAt: 0, pending: null, stream: null, detector: null, loop: 0, resume: 0, canvas: null,
+  me: null, error: '', warning: null, cam: null, result: null, busy: false,
+  pending: null, sending: false, resume: 0,
   async start() { await this.load(); },
   async load() {
     try { this.me = await api('/api/turnstiles/me'); this.error = ''; } catch (e) { this.error = errorText(e); }
     this.render();
   },
   render() {
-    const secure = window.isSecureContext, supported = !!navigator.mediaDevices?.getUserMedia;
+
     const online = navigator.onLine !== false, m = this.me, c = this.cam, r = this.result;
-    let placeholder;
-    if (!secure) placeholder = '<b>Kamera için HTTPS gerekli.</b><br>Telefon tarayıcıları kamerayı yalnızca https:// adreslerinde açar.';
-    else if (!supported) placeholder = '<b>Bu cihaz veya tarayıcı kamera erişimini desteklemiyor.</b><br>Güncel Chrome (Android) ya da Safari (iPhone) ile dene veya resepsiyona başvur.';
-    else placeholder = `Turnikenin üzerindeki QR kodu çerçeveye getir.<br><button class="btn primary" data-act="cam-start" style="margin-top:12px" ${c.starting ? 'disabled' : ''}>${c.starting ? 'Kamera açılıyor…' : c.error ? 'Tekrar dene' : 'Kamerayı aç'}</button>`;
     const html = `<div class="wrap">
   ${SIM}
   ${this.error ? `<div class="notice bad" role="alert"><b>Durum alınamadı</b>${esc(this.error)}</div>` : ''}
@@ -115,7 +110,7 @@ const Gate = {
   ${this.warning ? `<div class="notice bad" role="alert"><b>Dolabın hâlâ sende</b>${esc(this.warning.message)}<div class="row" style="margin-top:8px"><a class="btn" href="/#locker" target="_top">Dolabım</a><button class="btn" data-act="warn-ok">Anladım</button></div></div>` : m?.inside && m?.locker ? `<div class="notice info" role="note"><b>${esc(m.locker.label)} sende</b>Çıkmadan önce “Dolabım” ekranından dolabı bırakmayı unutma. Çıkışın engellenmez.</div>` : ''}
   <section class="card"><div class="presence"><span class="dot ${m?.inside ? 'in' : ''}" aria-hidden="true"></span>${m ? (m.inside ? 'Şu an salondasın' : 'Şu an dışarıdasın') : 'Durum bilinmiyor'}</div>
     <p class="muted small" style="margin:6px 0 0">${m?.inside ? 'Herhangi bir turnikeyi okutunca ÇIKIŞ kaydedilir.' : 'Herhangi bir turnikeyi okutunca GİRİŞ kaydedilir.'} Ders rezervasyonun veya ders hakkın etkilenmez.</p></section>
-  <section class="card"><div class="scanner" id="scanner">${c.active ? '<video id="gate-video" playsinline muted autoplay aria-label="Kamera görüntüsü"></video><div class="reticle" aria-hidden="true"></div>' : `<div class="placeholder">${placeholder}</div>`}
+  <section class="card"><div class="scanner" id="scanner">${c.view('Turnikenin üzerindeki QR kodu çerçeveye getir.')}
     ${r ? `<div class="result ${r.ok ? 'ok' : 'bad'}" role="${r.ok ? 'status' : 'alert'}">${esc(r.title)}<div class="small" style="font-weight:600">${esc(r.detail)}</div></div>` : ''}</div>
     ${c.error ? `<div class="notice bad" role="alert" style="margin-top:12px"><b>${esc(c.error)}</b>${esc(c.help)}</div>` : ''}
     ${this.pending ? `<div class="notice bad" role="alert" style="margin-top:12px"><b>Geçiş gönderilemedi</b>Aynı okutma tekrar gönderilir; çift kayıt oluşmaz.<div class="row" style="margin-top:8px"><button class="btn" data-act="resend">Tekrar gönder</button><button class="btn" data-act="discard">Vazgeç</button></div></div>` : ''}
@@ -124,58 +119,17 @@ const Gate = {
 </div>`;
     const video = $('gate-video');
     root.innerHTML = html;
-    if (c.active) { const v = $('gate-video'); if (video && v) v.replaceWith(video); this.attach(); }
+    if (c.active) { const v = $('gate-video'); if (video && v) v.replaceWith(video); c.attach(); }
   },
-  async startCamera() {
-    Object.assign(this.cam, { error: '', help: '', starting: true }); this.render();
-    try {
-      try { this.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false }); }
-      catch (e) { if (e?.name === 'OverconstrainedError') this.stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false }); else throw e; }
-    } catch (e) { [this.cam.error, this.cam.help] = cameraError(e); this.cam.starting = false; return this.render(); }
-    this.detector = null;
-    try { if ('BarcodeDetector' in window && (await window.BarcodeDetector.getSupportedFormats()).includes('qr_code')) this.detector = new window.BarcodeDetector({ formats: ['qr_code'] }); } catch {}
-    if (!this.detector && !window.jsQR) {
-      try { await new Promise((ok, no) => { const s = document.createElement('script'); s.src = '/v9/vendor/jsQR.js'; s.onload = ok; s.onerror = no; document.head.appendChild(s); }); }
-      catch { this.stopCamera(); Object.assign(this.cam, { error: 'QR çözücü yüklenemedi.', help: 'Bağlantını kontrol edip tekrar dene.' }); return this.render(); }
-    }
-    Object.assign(this.cam, { starting: false, active: true });
-    this.render();
-  },
-  attach() {
-    const v = $('gate-video'); if (!v || !this.stream) return;
-    if (v.srcObject !== this.stream) { v.srcObject = this.stream; v.play().catch(() => {}); }
-    clearTimeout(this.loop); this.loop = setTimeout(() => this.frame(), 300);
-  },
-  async frame() {
-    const v = $('gate-video'); if (!this.cam.active || !v || document.hidden) return;
-    if (!this.busy && v.readyState >= 2) {
-      let text = '';
-      try {
-        if (this.detector) text = (await this.detector.detect(v))[0]?.rawValue || '';
-        else if (window.jsQR) {
-          const w = Math.min(640, v.videoWidth), h = Math.round(v.videoHeight * w / v.videoWidth);
-          const cv = this.canvas = this.canvas || document.createElement('canvas'); cv.width = w; cv.height = h;
-          const ctx = cv.getContext('2d', { willReadFrequently: true }); ctx.drawImage(v, 0, 0, w, h);
-          text = window.jsQR(ctx.getImageData(0, 0, w, h).data, w, h, { inversionAttempts: 'dontInvert' })?.data || '';
-        }
-      } catch {}
-      if (text) await this.scanned(text);
-    }
-    this.loop = setTimeout(() => this.frame(), 200);
-  },
-  stopCamera() { clearTimeout(this.loop); this.stream?.getTracks().forEach(t => t.stop()); this.stream = null; this.cam.active = false; },
-  async scanned(raw) {
-    const code = String(raw).trim(), now = Date.now();
-    // The camera sees the same code many times per second; one read per code every 5 s.
-    if (code === this.last && now - this.lastAt < 5000) return;
-    this.last = code; this.lastAt = now;
-    if (!code.startsWith(PREFIX)) return this.show(false, 'Tanınmayan kod', 'Bu bir FORM CLUB turnike QR kodu değil.');
+  async scanned(code) {
+    if (this.pending) return;
     if (navigator.onLine === false) return this.show(false, 'Bağlantı yok', 'Geçiş sunucuda onaylanır. İnternet gelince tekrar okut.');
     this.pending = { code, key: crypto.randomUUID() };
     return this.send();
   },
   async send() {
-    if (!this.pending) return;
+    if (!this.pending || this.sending) return;
+    this.sending = true;
     this.busy = true;
     try {
       const r = await api('/api/turnstiles/scan', { method: 'POST', body: { code: this.pending.code, idempotency_key: this.pending.key } });
@@ -183,13 +137,13 @@ const Gate = {
       if (r.locker_warning) this.warning = r.locker_warning;
       if (r.ok) this.show(true, `${DIR[r.direction].toUpperCase()} kaydedildi`, `${r.turnstile} · ${new Date(r.at).toLocaleTimeString('tr-TR', { timeZone: 'Europe/Istanbul' })} · simülasyon`);
       else this.show(false, 'Geçiş reddedildi', r.message);
-      if (r.ok) this.stopCamera();
+      if (r.ok) { this.cam.stop(); this.render(); }
       this.load();
     } catch (e) {
       // Network failure: keep the same idempotency key so a resend can never create a second pass.
       if (!e.offline) this.pending = null;
       this.show(false, e.offline ? 'Bağlantı yok' : 'Geçiş yapılamadı', errorText(e));
-    }
+    } finally { this.sending = false; }
   },
   show(ok, title, detail) {
     this.busy = true; this.result = { ok, title, detail };
@@ -199,15 +153,14 @@ const Gate = {
     this.resume = setTimeout(() => { this.busy = false; this.result = null; this.render(); }, ok ? 4000 : 3500);
   }
 };
-function cameraError(e) {
-  const n = e?.name || '';
-  const steps = /iphone|ipad/i.test(navigator.userAgent) ? 'iPhone: Ayarlar › Safari › Kamera › İzin Ver, sonra “Tekrar dene”.' : 'Adres çubuğundaki kilit simgesi › İzinler › Kamera › İzin ver, sonra “Tekrar dene”.';
-  if (n === 'NotAllowedError' || n === 'PermissionDeniedError') return ['Kamera izni verilmedi.', ' ' + steps];
-  if (n === 'NotFoundError') return ['Bu cihazda kamera bulunamadı.', ' Resepsiyona başvur.'];
-  if (n === 'NotReadableError') return ['Kamera başka bir uygulama tarafından kullanılıyor.', ' O uygulamayı kapatıp tekrar dene.'];
-  if (n === 'SecurityError') return ['Kamera bu sayfada engellendi.', ' Sayfayı HTTPS adresinden aç.'];
-  return ['Kamera açılamadı.', ' ' + (e?.message || n)];
-}
+Gate.cam = window.FormclubQrCamera.create({
+  videoId: 'gate-video',
+  accepts: code => window.FormclubQrCamera.formats.gate.test(code),
+  repeatMs: 20000,
+  busy: () => Gate.busy || !!Gate.pending,
+  onCode: code => Gate.scanned(code),
+  onChange: () => Gate.render()
+});
 
 root.addEventListener('click', ev => {
   const t = ev.target.closest('[data-act]'); if (!t || t.disabled) return;
@@ -215,13 +168,13 @@ root.addEventListener('click', ev => {
   if (a === 'retry-boot') return boot();
   if (a === 'reload') return Admin.load();
   if (['print', 'print-all', 'toggle', 'rotate'].includes(a)) return Admin.act(t);
-  if (a === 'cam-start') return Gate.startCamera();
-  if (a === 'cam-stop') { Gate.stopCamera(); return Gate.render(); }
+  if (a === 'cam-start') return Gate.cam.start();
+  if (a === 'cam-stop') { Gate.cam.stop(); return Gate.render(); }
   if (a === 'resend') return Gate.send();
-  if (a === 'discard') { Gate.pending = null; return Gate.render(); }
+  if (a === 'discard' && !Gate.sending) { Gate.pending = null; return Gate.render(); }
   if (a === 'warn-ok') { Gate.warning = null; return Gate.render(); }
 });
-document.addEventListener('visibilitychange', () => { if (document.hidden && Gate.cam.active) { Gate.stopCamera(); Gate.render(); } });
+document.addEventListener('visibilitychange', () => { if (document.hidden && (Gate.cam.active || Gate.cam.starting)) { Gate.cam.stop(); Gate.render(); } });
 window.addEventListener('online', () => user?.role === 'member' ? Gate.render() : user && Admin.load());
 window.addEventListener('offline', () => user?.role === 'member' && Gate.render());
 boot();

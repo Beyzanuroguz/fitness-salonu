@@ -17,7 +17,7 @@
     "open:ios": "cap open ios",
     "open:android": "cap open android",
     "doctor": "cap doctor",
-    "test": "node --test test/"
+    "test": "node --test test/*.test.js"
   },
   "dependencies": {
     "@capacitor/android": "8.6.2",

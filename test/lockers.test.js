@@ -93,7 +93,7 @@ test('one active assignment per locker; second member gets "occupied"; idempoten
   assert.equal(f.db.prepare('SELECT count(*) n FROM locker_assignments WHERE ended_at IS NULL').get().n, 1);
 });
 
-test('concurrency: two members on two separate DB connections claim the same locker at the same instant; exactly one wins', async () => {
+test('concurrency: a member and a trainer on two separate DB connections claim the same locker at the same instant; exactly one wins', async () => {
   const { Worker } = require('node:worker_threads');
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'formclub-locker-')), file = path.join(dir, 'isolated.sqlite');
   try {
@@ -114,7 +114,7 @@ test('concurrency: two members on two separate DB connections claim the same loc
       catch (e) { out = { error: e.message }; } finally { db.close(); }
       parentPort.postMessage(out);`;
     const run = (user, turn) => new Promise((ok, no) => { const w = new Worker(src, { eval: true, workerData: { file, mod: require.resolve('../backend/lockers'), code, user, barrier, turn } }); w.once('message', ok); w.once('error', no); });
-    const results = await Promise.all([run(U.one, 0), run(U.two, 1)]);
+    const results = await Promise.all([run(U.one, 0), run(U.teacher, 1)]);
     assert.ok(results.every(r => !r.error), JSON.stringify(results));
     assert.equal(results.filter(r => r.ok).length, 1, JSON.stringify(results));
     assert.equal(results.find(r => !r.ok).reason, 'occupied');
@@ -229,7 +229,7 @@ test('per-user claim rate limit and unauthenticated access', () => {
   for (let i = 0; i < 3; i++) f.claim(U.one, 'x');
   status(() => f.claim(U.one, 'x'), 429);
   status(() => f.lockers('GET', '/api/lockers/me', {}, null), 401);
-  status(() => f.lockers('GET', '/api/lockers/me', {}, U.admin), 403);
+  assert.equal(f.lockers('GET', '/api/lockers/me', {}, U.admin).requires_entry, false);
   status(() => f.lockers('GET', '/api/lockers/nope', {}, U.admin), 404);
 });
 
@@ -279,8 +279,8 @@ test('HTTP: session, CSRF, JSON-only, concurrent requests, static module under C
   assert.doesNotMatch(html, /<script>|\son[a-z]+="/, 'no inline script or handlers');
   await req('/api/logout', 'POST', {}, cookies[0]); assert.equal((await req('/api/lockers/me', 'GET', null, cookies[0])).status, 401);
   const app = fs.readFileSync(path.join(__dirname, '../public/app.js'), 'utf8');
-  assert.match(app, /navItems\.admin\.push\(\['lockers','▦','Dolap Yönetimi'\]\);navItems\.member\.push\(\['lockerScan','▦','Dolap QR Tara'\],\['locker','▣','Dolabım'\]\)/);
-  assert.doesNotMatch(app, /navItems\.teacher\.push\(\['(?:lockers|lockerScan|locker)'/);
+  assert.match(app, /navItems\.admin\.push\(\['lockers','▦','Dolap Yönetimi'\]\)/);
+  assert.match(app, /for\(const r of \['admin','teacher','member'\]\)navItems\[r\]\.push\(\['lockerScan','▦','Dolap QR Tara'\],\['locker','▣','Dolabım'\]\)/);
   assert.match(app, /navItems\.member\.push\(\['gate','⇆','Turnike QR Tara'\]\)/, 'turnstile entry kept');
   assert.match(app, /\['entry','scan','performance','notifications'\]\.includes\(page\)/, 'legacy QR entry kept');
 });
@@ -306,7 +306,7 @@ test('UI renders admin locker management and member scan / my-locker views (vm, 
   const adminHtml = await boot({ '/api/me': { user: { role: 'admin' } }, '/api/lockers': f.list() });
   assert.equal((adminHtml.match(/aria-label="Dolap QR kodu"/g) || []).length, 20);
   for (const s of ['Dolap Yönetimi', 'SİMÜLASYON', 'Boş', 'Dolu', 'Bakımda', 'Pasif', 'Açık uyarı', 'Synthetic One turnikeden çıktı', 'Dolap ekle', 'Tüm QR kodlarını yazdır',
-    'manuel boşalt', 'Üye ata', 'QR yenile', 'Dolap işlem kayıtları', 'Menteşe', 'Dolapla çıkış uyarısı', 'kopyalanabilir']) assert.ok(adminHtml.includes(s), s);
+    'manuel boşalt', 'Kullanıcı ata', 'QR yenile', 'Dolap işlem kayıtları', 'Menteşe', 'Dolapla çıkış uyarısı', 'kopyalanabilir']) assert.ok(adminHtml.includes(s), s);
   // UI/UX V2: compact header icons, dropdown filter with counts, card icons + more menu, notes collapsed at the bottom.
   for (const s of ['aria-label="Tüm QR kodlarını yazdır"', 'aria-label="Listeyi yenile"', 'aria-label="Dolap ekle"', '<select id="lk-filter">', '>Tümü (20)</option>', '>Bakımda (1)</option>',
     'aria-label="Dolap 1 QR kodunu yazdır"', 'aria-label="Dolap 1 QR kimliğini yenile"', 'aria-label="Dolap 1 için diğer işlemler"', '>Dolap 01</h2>', 'Atanmamış', '20 dolap']) assert.ok(adminHtml.includes(s), s);
@@ -329,4 +329,86 @@ test('UI renders admin locker management and member scan / my-locker views (vm, 
   // Turnstile member screen warns about a held locker before and after exit.
   const gateJs = read('turnstiles/turnstiles.js');
   assert.match(gateJs, /Dolabın hâlâ sende/); assert.match(gateJs, /Çıkışın engellenmez/); assert.match(gateJs, /locker_warning/);
+});
+
+test('each role can QR-release its own assignment; the current QR and assignment ID are both required for QR release', () => {
+  const f = fixture();
+  f.pass(U.one);
+  const me = user => f.lockers('GET', '/api/lockers/me', {}, user);
+  const releaseQr = (user, assignment_id, code, idempotency_key = f.k()) =>
+    f.lockers('POST', '/api/lockers/me/release', { assignment_id, code, idempotency_key, confirm: true }, user);
+  for (const [user, id] of [[U.admin, 1], [U.teacher, 2], [U.one, 3]]) {
+    assert.equal(f.claim(user, f.qr(id)).ok, true);
+    assert.equal(f.claim(user, f.qr(5)).reason, 'has_locker');
+    assert.equal(me(user).requires_entry, user.role === 'member');
+    assert.equal(me(user).events.find(e => e.action === 'claim').actor_role, user.role);
+  }
+  assert.equal(f.claim(U.two, f.qr(2)).reason, 'not_inside');
+  f.pass(U.two);
+  assert.equal(f.claim(U.two, f.qr(2)).reason, 'occupied');
+  const teacherAssignment = me(U.teacher).locker.assignment_id;
+  status(() => releaseQr(U.teacher, me(U.admin).locker.assignment_id, f.qr(1)), 409);
+  assert.equal(releaseQr(U.teacher, teacherAssignment, f.qr(1)).reason, 'wrong_locker');
+  const old = f.qr(2);
+  f.lockers('POST', '/api/lockers/2/rotate', { reason: 'Synthetic rotation' }, U.admin);
+  assert.equal(releaseQr(U.teacher, teacherAssignment, old).reason, 'unknown_code');
+  assert.equal(f.pass(U.one).locker_warning.label, 'Dolap 3');
+  for (const [user, id] of [[U.admin, 1], [U.teacher, 2], [U.one, 3]]) {
+    const assignment = me(user).locker.assignment_id, key = f.k(), code = f.qr(id);
+    assert.equal(releaseQr(user, assignment, code, key).ok, true);
+    assert.equal(releaseQr(user, assignment, code, key).replayed, true);
+    assert.equal(me(user).locker, null);
+    assert.equal(me(user).alert, null);
+    assert.equal(me(user).events.find(e => e.action === 'release').actor_role, user.role);
+  }
+  const assigned = f.lockers('POST', '/api/lockers/1/assign', { owner_user_id: U.teacher.id, reason: 'Synthetic assignment' }, U.admin);
+  assert.equal(assigned.locker.assignment.owner_role, 'teacher');
+  assert.equal(me(U.teacher).locker.id, 1);
+  const ended = f.lockers('POST', '/api/lockers/1/release', { assignment_id: f.onLocker(1), reason: 'Synthetic release' }, U.admin);
+  assert.equal(ended.locker.state, 'available');
+  assert.ok(f.list().events.some(e => e.action === 'admin_release' && e.actor_role === 'admin' && e.owner_role === 'teacher'));
+  f.db.close();
+});
+
+test('duplicate claim rejections share one audit event and preserve each replay after state changes', () => {
+  const f = fixture(), code = f.qr(1);
+  const first = f.claim(U.one, code);
+  const duplicateKey = f.k();
+  assert.equal(f.claim(U.one, code, duplicateKey).at, first.at);
+  assert.equal(f.list().events.length, 1);
+  f.pass(U.one);
+  assert.equal(f.claim(U.one, code, duplicateKey).reason, 'not_inside');
+  status(() => f.claim(U.one, f.qr(2), duplicateKey), 409);
+  assert.equal(f.claim(U.one, code).ok, true);
+  assert.equal(f.list().events.length, 2);
+  f.db.close();
+});
+
+test('upgrading legacy assignments preserves IDs, alerts, audit and printed codes', () => {
+  const db = new DatabaseSync(':memory:');
+  db.exec(SCHEMA + `
+    CREATE TABLE lockers(id INTEGER PRIMARY KEY AUTOINCREMENT,label TEXT,code TEXT,status TEXT,code_rotated_at INTEGER,created_at INTEGER);
+    INSERT INTO lockers VALUES(1,'Dolap 1','0123456789abcdef0123456789abcdef','available',0,0);
+    CREATE TABLE locker_assignments(id INTEGER PRIMARY KEY AUTOINCREMENT,locker_id INTEGER NOT NULL REFERENCES lockers(id),
+      member_id INTEGER NOT NULL REFERENCES members(id),source TEXT,started_by INTEGER,started_at INTEGER,ended_at INTEGER,ended_by INTEGER,end_reason TEXT);
+    CREATE UNIQUE INDEX locker_one_active_per_locker ON locker_assignments(locker_id) WHERE ended_at IS NULL;
+    CREATE UNIQUE INDEX locker_one_active_per_member ON locker_assignments(member_id) WHERE ended_at IS NULL;
+    INSERT INTO locker_assignments VALUES(12,1,1,'member',2,0,NULL,NULL,NULL);
+    CREATE TABLE locker_alerts(id INTEGER PRIMARY KEY,kind TEXT,member_id INTEGER,locker_id INTEGER,
+      assignment_id INTEGER REFERENCES locker_assignments(id),gate_event_id INTEGER,created_at INTEGER,resolved_at INTEGER,resolved_by INTEGER,resolution_note TEXT);
+    INSERT INTO locker_alerts VALUES(6,'exit_with_locker',1,1,12,2,0,NULL,NULL,NULL);
+    CREATE TABLE locker_events(id INTEGER PRIMARY KEY,locker_id INTEGER,member_id INTEGER,actor_user_id INTEGER,actor_role TEXT,
+      action TEXT,result TEXT,reason TEXT,note TEXT,detail TEXT,idempotency_key TEXT,request_fp TEXT,created_at INTEGER);
+    INSERT INTO locker_events VALUES(4,1,1,2,'member','claim','ok',NULL,NULL,NULL,NULL,NULL,0);
+  `);
+  const lockers = createLockers(db);
+  createTurnstiles(db, { locker: lockers.gate });
+  const me = lockers('GET', '/api/lockers/me', {}, U.one);
+  assert.equal(me.locker.assignment_id, 12);
+  assert.equal(me.alert.label, 'Dolap 1');
+  assert.equal(me.events[0].id, 4);
+  assert.equal(lockers('GET', '/api/lockers', {}, U.admin).lockers[0].qr, PREFIX + '0123456789abcdef0123456789abcdef');
+  assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(), []);
+  assert.equal(db.prepare('PRAGMA foreign_keys').get().foreign_keys, 1);
+  db.close();
 });

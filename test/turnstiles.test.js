@@ -160,7 +160,7 @@ test('UI renders admin gate cards with QR SVG and the member scanner with histor
       fetch: async p => ({ ok: true, status: 200, json: async () => routes[p] }), addEventListener() {}, isSecureContext: extra.secure ?? true };
     ctx.window = ctx; ctx.globalThis = ctx;
     vm.createContext(ctx);
-    vm.runInContext(read('v9/vendor/qrcode.js'), ctx); vm.runInContext(read('turnstiles/turnstiles.js'), ctx);
+    vm.runInContext(read('v9/vendor/qrcode.js'), ctx); vm.runInContext(read('turnstiles/qr-camera.js'), ctx); vm.runInContext(read('turnstiles/turnstiles.js'), ctx);
     for (let i = 0; i < 10; i++) await new Promise(r => setImmediate(r));
     return root.innerHTML;
   }
@@ -175,4 +175,16 @@ test('UI renders admin gate cards with QR SVG and the member scanner with histor
   assert.match(await boot('member', memberRoutes, { navigator: { mediaDevices: undefined } }), /desteklemiyor/);
   assert.match(await boot('member', memberRoutes, { secure: false }), /HTTPS gerekli/);
   assert.match(await boot('member', memberRoutes, { navigator: { onLine: false } }), /Bağlantı yok/);
+});
+
+test('rejected gate scans retain one audit event per code, outcome and minute', () => {
+  const f = fixture(), code = PREFIX + '0'.repeat(32);
+  assert.equal(f.scan(f.U.member, code, 'unknown-first').reason, 'unknown_code');
+  assert.equal(f.scan(f.U.member, code, 'unknown-again').reason, 'unknown_code');
+  assert.equal(f.scan(f.U.member, code, 'unknown-again').replayed, true);
+  forbidden(() => f.scan(f.U.member, f.codes()[1], 'unknown-again'), 409);
+  assert.equal(f.db.prepare('SELECT count(*) n FROM gate_events').get().n, 1);
+  f.tick(60000);
+  assert.equal(f.scan(f.U.member, code, 'unknown-later').reason, 'unknown_code');
+  assert.equal(f.db.prepare('SELECT count(*) n FROM gate_events').get().n, 2);
 });

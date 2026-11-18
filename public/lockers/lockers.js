@@ -7,7 +7,7 @@ const root = document.getElementById('locker-root');
 const esc = v => String(v ?? '').replace(/[&<>"']/g, x => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[x]));
 const time = ms => new Date(ms).toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 const clock = ms => new Date(ms).toLocaleTimeString('tr-TR', { timeZone: 'Europe/Istanbul', hour: '2-digit', minute: '2-digit' });
-const PREFIX = 'FORMCLUB-LOCKER:1:', GATE_PREFIX = 'FORMCLUB-GATE:1:';
+const ROLE = { admin: 'Yönetici', teacher: 'Eğitmen', member: 'Üye' };
 const SIM = '<div class="notice sim" role="note"><b>SİMÜLASYON</b>Bu sürüm sanal dolap kaydı tutar; gerçek kilit açılmaz. Dolap QR kodu kişisel veri veya kilit açma yetkisi taşımaz.</div>';
 const key = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2, 12));
 
@@ -30,8 +30,9 @@ async function boot() {
   try {
     user = (await api('/api/me')).user;
     if (!user) { root.innerHTML = '<div class="wrap"><div class="notice info"><b>Giriş gerekli</b><a href="/" target="_top" class="btn primary">Giriş yap</a></div></div>'; return; }
-    if (user.role === 'admin') return Admin.start();
-    if (user.role === 'member') return Member.start(location.hash === '#locker' ? 'mine' : 'scan');
+    const hash = location.hash;
+    if (user.role === 'admin' && hash !== '#locker' && hash !== '#lockerScan') return Admin.start();
+    if (ROLE[user.role]) return Personal.start(hash === '#locker' ? 'mine' : 'scan');
     root.innerHTML = '<div class="wrap"><div class="notice info">Bu ekran yalnızca yönetici ve üye hesapları içindir.</div></div>';
   } catch (e) {
     root.innerHTML = `<div class="wrap"><div class="notice bad" role="alert"><b>Ekran açılamadı</b>${esc(errorText(e))}</div><button class="btn" data-act="retry-boot">Tekrar dene</button></div>`;
@@ -47,7 +48,7 @@ function qrSvg(text) {
 
 /* ---------- Admin ---------- */
 const FORMS = {
-  assign: ['Üye ata', 'Ata'], release: ['Dolabı manuel boşalt', 'Boşalt'], maintenance: ['Bakıma al', 'Bakıma al'],
+  assign: ['Kullanıcı ata', 'Ata'], release: ['Dolabı manuel boşalt', 'Boşalt'], maintenance: ['Bakıma al', 'Bakıma al'],
   inactive: ['Pasif yap', 'Pasif yap'], available: ['Kullanıma aç', 'Kullanıma aç'], rotate: ['QR kimliğini yenile', 'Yenile'], resolve: ['Uyarıyı kapat', 'Kapat']
 };
 // Per state: the one action shown on the card, and everything in its "more" menu.
@@ -76,7 +77,11 @@ const Admin = {
     const d = this.data, l = d.lockers.find(x => x.id === f.id), a = d.alerts.find(x => x.id === f.id);
     const [title, ok] = FORMS[f.kind];
     const subject = f.kind === 'resolve' ? `${esc(a?.member)} · ${esc(a?.locker)}` : esc(l?.label);
-    const members = f.kind === 'assign' ? `<label for="lf-member">Üye</label><select id="lf-member"><option value="">Üye seçin</option>${d.members.map(m => `<option value="${m.id}"${f.member === m.id ? ' selected' : ''}>${esc(m.name)}</option>`).join('')}</select>` : '';
+    const options = [
+      ...d.members.map(m => ({ value: String(m.id), label: m.name })),
+      ...(d.staff || []).map(u => ({ value: 'staff-' + u.id, label: u.name + ' · ' + ROLE[u.role] }))
+    ];
+    const members = f.kind === 'assign' ? `<label for="lf-member">Kullanıcı</label><select id="lf-member"><option value="">Kullanıcı seçin</option>${options.map(u => `<option value="${u.value}"${f.member === u.value ? ' selected' : ''}>${esc(u.label)}</option>`).join('')}</select>` : '';
     const reasonLabel = f.kind === 'resolve' ? 'Not (isteğe bağlı)' : 'Sebep (zorunlu, kayda geçer)';
     return `<section class="card form-card" id="locker-form" aria-labelledby="lf-h"><h2 id="lf-h">${title}: ${subject}</h2>
       ${f.kind === 'release' ? `<p class="muted small">${esc(l?.assignment?.member)} kullanıcısının tahsisi sonlandırılır. Fiziksel kilit açılmaz.</p>` : ''}
@@ -88,7 +93,7 @@ const Admin = {
   render() {
     const d = this.data, f = this.form;
     // Keep unsaved form input across background refreshes.
-    if (f) { const r = document.getElementById('lf-reason'), m = document.getElementById('lf-member'); if (r) f.reason = r.value; if (m) f.member = Number(m.value || 0); }
+    if (f) { const r = document.getElementById('lf-reason'), m = document.getElementById('lf-member'); if (r) f.reason = r.value; if (m) f.member = m.value; }
     if (!d) { root.innerHTML = `<div class="wrap">${this.error ? `<div class="notice bad" role="alert"><b>Dolaplar yüklenemedi</b>${esc(this.error)}</div><button class="btn" data-act="reload">Tekrar dene</button>` : '<p class="boot">Yükleniyor…</p>'}</div>`; return; }
     const c = d.counts, list = d.lockers.filter(l => this.filter === 'all' || l.state === this.filter);
     const stat = (k, label, n = c[k]) => `<div class="lk-stat s-${k}"><span>${label}</span><strong>${n}</strong></div>`;
@@ -104,7 +109,7 @@ const Admin = {
         <footer class="lk-card-foot print-hide"><div class="lk-who">${l.assignment ? `<b title="${esc(l.assignment.member)}">${esc(l.assignment.member)}</b><span>${esc(time(l.assignment.since))} · ${l.assignment.source === 'admin' ? 'yönetici atadı' : 'üye aldı'}</span>` : '<b class="muted">Atanmamış</b><span>Kod yenilendi: ' + esc(time(l.code_rotated_at)) + '</span>'}</div>
           <button type="button" class="btn small${main === 'release' ? ' danger' : ''} no-print" data-act="form" data-kind="${main}" data-id="${l.id}">${FORMS[main][0]}</button></footer></section>`;
     };
-    const ev = d.events.map(e => `<tr><td>${esc(time(e.at))}</td><td>${esc(e.locker || '—')}</td><td>${esc(e.member || '—')}</td><td>${esc(e.action_label)}${e.detail ? ` <span class="muted small">(${esc(e.detail)})</span>` : ''}</td><td>${e.result === 'ok' ? 'Tamam' : '<span class="rej">Reddedildi</span>'}</td><td>${esc(e.actor || '')} <span class="muted small">${e.actor_role === 'admin' ? 'yönetici' : 'üye'}</span></td><td class="reason">${esc(e.message || e.note || '')}</td></tr>`).join('');
+    const ev = d.events.map(e => `<tr><td>${esc(time(e.at))}</td><td>${esc(e.locker || '—')}</td><td>${esc(e.member || '—')}${e.owner_role ? ` <span class="muted small">${esc(ROLE[e.owner_role])}</span>` : ''}</td><td>${esc(e.action_label)}${e.detail ? ` <span class="muted small">(${esc(e.detail)})</span>` : ''}</td><td>${e.result === 'ok' ? 'Tamam' : '<span class="rej">Reddedildi</span>'}</td><td>${esc(e.actor || '')} <span class="muted small">${esc(ROLE[e.actor_role])}</span></td><td class="reason">${esc(e.message || e.note || '')}</td></tr>`).join('');
     root.innerHTML = `<div class="wrap lk-admin">
   <div class="lk-head"><h1>Dolap Yönetimi</h1><div class="lk-toolbar no-print" role="group" aria-label="Dolap işlemleri">${iconBtn('print-all', ICON.print, 'Tüm QR kodlarını yazdır', 'Tüm QR kodlarını yazdır')}${iconBtn('reload', ICON.refresh, 'Listeyi yenile', 'Listeyi yenile')}${iconBtn('add', ICON.plus, 'Dolap ekle', 'Yeni dolap ekle', '', ' primary')}</div></div>
   ${this.error ? `<div class="notice bad" role="alert">Son işlem başarısız: ${esc(this.error)}</div>` : ''}
@@ -114,11 +119,11 @@ const Admin = {
   ${d.alerts.length ? `<section class="card lk-alerts" aria-labelledby="al-h"><h2 id="al-h">Uyarılar: dolapla çıkış</h2><ul class="log">${d.alerts.map(a => `<li><span>${esc(a.message)}<br><span class="muted small">${esc(time(a.at))} · şu an ${a.inside ? 'içeride' : 'dışarıda'}</span></span><button class="btn small" data-act="form" data-kind="resolve" data-id="${a.id}">Uyarıyı kapat</button></li>`).join('')}</ul></section>` : ''}
   <div class="lk-filterbar no-print"><label for="lk-filter">Durum</label><select id="lk-filter">${opt('all', 'Tümü', d.lockers.length)}${opt('available', 'Boş', c.available)}${opt('occupied', 'Dolu', c.occupied)}${opt('maintenance', 'Bakımda', c.maintenance)}${opt('inactive', 'Pasif', c.inactive)}</select><span class="lk-count" role="status" aria-live="polite">${list.length} dolap</span></div>
   <div class="grid locker-grid">${list.map(card).join('') || '<p class="muted">Bu filtrede dolap yok.</p>'}</div>
-  <section class="card"><h2>Dolap işlem kayıtları</h2>${ev ? `<div class="table-wrap"><table><thead><tr><th>Zaman</th><th>Dolap</th><th>Üye</th><th>İşlem</th><th>Sonuç</th><th>Aktör</th><th>Sebep / not</th></tr></thead><tbody>${ev}</tbody></table></div>` : '<p class="muted">Henüz kayıt yok.</p>'}</section>
+  <section class="card"><h2>Dolap işlem kayıtları</h2>${ev ? `<div class="table-wrap"><table><thead><tr><th>Zaman</th><th>Dolap</th><th>Kullanıcı</th><th>İşlem</th><th>Sonuç</th><th>Aktör</th><th>Sebep / not</th></tr></thead><tbody>${ev}</tbody></table></div>` : '<p class="muted">Henüz kayıt yok.</p>'}</section>
   <details class="card lk-notes no-print"><summary>Bilgilendirme ve Güvenlik Notları</summary>
     <div class="notice sim" role="note"><b>SİMÜLASYON</b>Bu sürüm sanal dolap kaydı tutar; gerçek kilit açılmaz. Dolap QR kodu kişisel veri veya kilit açma yetkisi taşımaz.</div>
     ${d.ephemeral ? '<div class="notice info" role="note"><b>Demo ortamı</b>Sunucu yeniden başlayınca (uyku, yeniden dağıtım) dolap QR kimlikleri, tahsisler ve tüm dolap kayıtları sıfırlanır. Basılı demo kodlarını her oturumda bu ekrandan yeniden yazdırın.</div>' : ''}
-    <div class="notice info" role="note"><b>Güvenlik sınırı</b>Dolap kodu sabittir ve kopyalanabilir. Üye yalnızca turnikeden giriş yaptıktan sonra dolap alabilir; aynı anda bir üyeye bir dolap, bir dolaba bir üye düşer. Kod sızarsa “QR yenile” ile eskisini geçersiz kılın.</div>
+    <div class="notice info" role="note"><b>Güvenlik sınırı</b>Dolap kodu sabittir ve kopyalanabilir. Üyeler turnikeden giriş yaptıktan sonra dolap alabilir. Yönetici ve eğitmenler kendi oturumlarıyla dolap alabilir. Her kullanıcı aynı anda bir dolap kullanabilir. Kod sızarsa “QR yenile” ile eskisini geçersiz kılın.</div>
   </details>
 </div>`;
   },
@@ -144,14 +149,14 @@ const Admin = {
   },
   async submit() {
     const f = this.form, reason = document.getElementById('lf-reason')?.value.trim() || '';
-    const member = Number(document.getElementById('lf-member')?.value || 0);
+    const member = document.getElementById('lf-member')?.value || '';
     f.reason = reason; f.member = member;
-    if (f.kind === 'assign' && !member) { f.error = 'Üye seçin.'; return this.render(); }
+    if (f.kind === 'assign' && !member) { f.error = 'Kullanıcı seçin.'; return this.render(); }
     if (f.kind !== 'resolve' && reason.length < 3) { f.error = 'Sebep en az 3 karakter olmalı.'; return this.render(); }
     f.busy = true; f.error = ''; this.render();
     const body = { idempotency_key: f.key, reason };
     const call = {
-      assign: () => api(`/api/lockers/${f.id}/assign`, { method: 'POST', body: { ...body, member_id: member } }),
+      assign: () => api(`/api/lockers/${f.id}/assign`, { method: 'POST', body: { ...body, ...(member.startsWith('staff-') ? { owner_user_id: Number(member.slice(6)) } : { member_id: Number(member) }) } }),
       release: () => api(`/api/lockers/${f.id}/release`, { method: 'POST', body: { ...body, assignment_id: f.assignment } }),
       rotate: () => api(`/api/lockers/${f.id}/rotate`, { method: 'POST', body }),
       resolve: () => api(`/api/lockers/alerts/${f.id}/resolve`, { method: 'POST', body: { idempotency_key: f.key, note: reason } })
@@ -169,12 +174,18 @@ const Admin = {
   }
 };
 
-/* ---------- Member ---------- */
-const Member = {
+/* ---------- Self-service ---------- */
+const Personal = {
   view: 'scan', me: null, error: '', result: null, pending: null, resume: 0, releasing: null, cam: null,
   async start(view) {
     this.view = view;
-    this.cam = window.FormclubQrCamera.create({ videoId: 'locker-video', onCode: code => this.scanned(code), onChange: () => this.render() });
+    this.cam = window.FormclubQrCamera.create({
+      videoId: 'locker-video',
+      accepts: code => window.FormclubQrCamera.formats.locker.test(code) || window.FormclubQrCamera.formats.gate.test(code),
+      busy: () => this.sending || !!this.pending || !!this.result || !this.me,
+      onCode: code => this.scanned(code),
+      onChange: () => this.render()
+    });
     await this.load();
   },
   async load() {
@@ -184,8 +195,8 @@ const Member = {
   statusCard() {
     const m = this.me;
     if (!m) return '';
-    const presence = `<div class="presence"><span class="dot ${m.inside ? 'in' : ''}" aria-hidden="true"></span>${m.inside ? 'Şu an salondasın' : 'Şu an dışarıdasın'}</div>`;
-    const hint = m.locker ? `Dolabın: <b>${esc(m.locker.label)}</b> · ${esc(clock(m.locker.since))} itibarıyla.` : m.inside ? 'Boş bir dolabın QR kodunu okutarak dolabı alabilirsin.' : 'Dolap almak için önce turnikeden giriş yap (Turnike QR Tara).';
+    const presence = !m.requires_entry ? '<div class="presence">Personel hesabı · turnike girişi gerekmez</div>' : `<div class="presence"><span class="dot ${m.inside ? 'in' : ''}" aria-hidden="true"></span>${m.inside ? 'Şu an salondasın' : 'Şu an dışarıdasın'}</div>`;
+    const hint = m.locker ? `Dolabın: <b>${esc(m.locker.label)}</b> · ${esc(clock(m.locker.since))} itibarıyla.` : (!m.requires_entry || m.inside) ? 'Boş bir dolabın QR kodunu okutarak dolabı alabilirsin.' : 'Dolap almak için önce turnikeden giriş yap (Turnike QR Tara).';
     return `<section class="card">${presence}<p class="muted small" style="margin:6px 0 0">${hint}</p></section>`;
   },
   alert() { return this.me?.alert ? `<div class="notice warn" role="alert"><b>Dolabın hâlâ sende</b>${esc(this.me.alert.message)}</div>` : ''; },
@@ -199,12 +210,14 @@ const Member = {
   ${online ? '' : '<div class="notice bad" role="alert"><b>Bağlantı yok</b>Dolap işlemi sunucuda onaylanır. İnternet gelince tekrar okut.</div>'}
   ${this.alert()}
   ${this.statusCard()}
-  ${m && !m.inside ? `<div class="notice info" role="note"><b>Önce turnike girişi</b>Dolap yalnızca başarılı turnike girişinden sonra alınabilir.<div class="row" style="margin-top:8px">${top('gate')}Turnike QR Tara</a></div></div>` : ''}
-  <section class="card"><h2>Dolap QR Tara</h2><div class="scanner" id="scanner">${cam.view('Dolabın üzerindeki QR kodu çerçeveye getir.')}
+  ${m?.requires_entry && !m.inside ? `<div class="notice info" role="note"><b>Önce turnike girişi</b>Dolap yalnızca başarılı turnike girişinden sonra alınabilir.<div class="row" style="margin-top:8px">${top('gate')}Turnike QR Tara</a></div></div>` : ''}
+  <section class="card"><h2>Dolap QR Tara</h2><div class="scanner" id="scanner">${cam.view(this.qrRelease ? 'Bırakmak için kendi dolabının QR kodunu çerçeveye getir.' : 'Dolabın üzerindeki QR kodu çerçeveye getir.')}
     ${r ? `<div class="result ${r.ok ? 'ok' : 'bad'}" role="${r.ok ? 'status' : 'alert'}">${esc(r.title)}<div class="small" style="font-weight:600">${esc(r.detail)}</div></div>` : ''}</div>
     ${cam.error ? `<div class="notice bad" role="alert" style="margin-top:12px"><b>${esc(cam.error)}</b>${esc(cam.help)}</div>` : ''}
     ${this.pending ? `<div class="notice bad" role="alert" style="margin-top:12px"><b>İstek gönderilemedi</b>Aynı okutma tekrar gönderilir; çift kayıt oluşmaz.<div class="row" style="margin-top:8px"><button class="btn" data-act="resend">Tekrar gönder</button><button class="btn" data-act="discard">Vazgeç</button></div></div>` : ''}
-    <div class="row" style="margin-top:12px">${cam.active ? '<button class="btn" data-act="cam-stop">Kamerayı kapat</button>' : ''}${m?.locker ? `${top('locker')}Dolabım</a>` : ''}</div></section>
+    <div class="row" style="margin-top:12px">${cam.active ? '<button class="btn" data-act="cam-stop">Kamerayı kapat</button>' : ''}${m?.locker && !this.qrRelease ? '<button class="btn" data-act="qr-release">QR ile bırak</button>' : ''}
+    ${this.qrRelease ? '<span class="muted small">Bırakmak için kendi dolabının QR kodunu okut.</span><button class="btn" data-act="qr-cancel">Bırakmayı iptal et</button>' : ''}
+    ${m?.locker ? `${top('locker')}Dolabım</a>` : ''}</div></section>
 </div>`;
     if (cam.active) { const v = document.getElementById('locker-video'); if (video && v) v.replaceWith(video); cam.attach(); }
   },
@@ -218,8 +231,8 @@ const Member = {
   ${this.alert()}
   <section class="card" aria-labelledby="mine-h"><h2 id="mine-h">Dolabım</h2>
   ${m?.locker ? `<div class="big">${esc(m.locker.label)}</div><p class="muted">Tahsis saati: <b>${esc(time(m.locker.since))}</b>${m.locker.source === 'admin' ? ' · resepsiyon atadı' : ''}</p>
-    ${rel ? `<div class="notice warn" role="alert"><b>${esc(m.locker.label)} bırakılsın mı?</b>Eşyalarını aldığından emin ol. Bıraktıktan sonra dolap başka üyeye verilebilir.<div class="row" style="margin-top:8px"><button class="btn danger" data-act="release-ok" ${rel.busy ? 'disabled' : ''}>${rel.busy ? 'Bırakılıyor…' : 'Evet, bırak'}</button><button class="btn" data-act="release-cancel">Vazgeç</button></div></div>`
-      : '<button class="btn danger" data-act="release">Dolabı bırak</button>'}`
+    ${rel ? `<div class="notice warn" role="alert"><b>${esc(m.locker.label)} bırakılsın mı?</b>Eşyalarını aldığından emin ol. Bıraktıktan sonra dolap başka kullanıcıya verilebilir.<div class="row" style="margin-top:8px"><button class="btn danger" data-act="release-ok" ${rel.busy ? 'disabled' : ''}>${rel.busy ? 'Bırakılıyor…' : 'Evet, bırak'}</button><button class="btn" data-act="release-cancel">Vazgeç</button></div></div>`
+      : `<div class="row">${top('lockerScan')}Dolap QR Tara</a><button class="btn danger" data-act="release">Dolabı bırak</button></div>`}`
     : `<p class="muted">Şu an sana ayrılmış bir dolap yok.</p><div class="row">${top('lockerScan')}Dolap QR Tara</a></div>`}
   </section>
   ${this.statusCard()}
@@ -228,36 +241,46 @@ const Member = {
   },
   async scanned(code) {
     if (this.pending) return; // an unsent claim waits for resend or discard
-    if (code.startsWith(GATE_PREFIX)) return this.show(false, 'Turnike kodu okundu', 'Turnike için “Turnike QR Tara” ekranını kullan.');
-    if (!code.startsWith(PREFIX)) return this.show(false, 'Tanınmayan kod', 'Bu bir FORM CLUB dolap QR kodu değil.');
+    if (window.FormclubQrCamera.formats.gate.test(code)) return this.show(false, 'Turnike kodu okundu', 'Turnike için “Turnike QR Tara” ekranını kullan.');
     if (navigator.onLine === false) return this.show(false, 'Bağlantı yok', 'Dolap işlemi sunucuda onaylanır. İnternet gelince tekrar okut.');
-    this.pending = { code, key: key() };
+    this.pending = { code, key: key(), assignment: this.qrRelease };
     return this.send();
   },
   async send() {
-    if (!this.pending) return;
-    this.cam.busy = true;
+    if (!this.pending || this.sending) return;
+    const { code, key: idempotency_key, assignment } = this.pending;
+    const path = assignment ? '/api/lockers/me/release' : '/api/lockers/claim';
+    const body = { code, idempotency_key };
+    if (assignment) Object.assign(body, { confirm: true, assignment_id: assignment });
+    this.sending = true;
     try {
-      const r = await api('/api/lockers/claim', { method: 'POST', body: { code: this.pending.code, idempotency_key: this.pending.key } });
+      const r = await api(path, { method: 'POST', body });
       this.pending = null;
-      if (r.ok) { this.show(true, `${r.locker} senin`, `Tahsis saati ${clock(r.at)} · simülasyon, kilit açılmaz`); this.cam.stop(); }
-      else this.show(false, 'Dolap alınamadı', r.message);
-      this.load();
+      if (r.ok) {
+        this.qrRelease = null;
+        this.cam.stop();
+        this.show(true, assignment ? `${r.locker} bırakıldı` : `${r.locker} senin`,
+          assignment ? 'Dolap artık boş.' : `Tahsis saati ${clock(r.at)} · simülasyon`);
+      } else this.show(false, assignment ? 'Dolap bırakılamadı' : 'Dolap alınamadı', r.message);
+      await this.load();
     } catch (e) {
-      // Network failure: keep the same idempotency key so a resend can never create a second claim.
+      // A network retry carries the same operation, assignment and idempotency key.
       if (!e.offline) this.pending = null;
-      this.show(false, e.offline ? 'Bağlantı yok' : 'Dolap alınamadı', errorText(e));
+      if (e.status === 409 && assignment) { this.qrRelease = null; await this.load(); }
+      this.show(false, e.offline ? 'Bağlantı yok' : 'Dolap işlemi yapılamadı', errorText(e));
+    } finally {
+      this.sending = false;
     }
   },
   show(ok, title, detail) {
-    this.cam.busy = true; this.result = { ok, title, detail };
+    this.result = { ok, title, detail };
     try { navigator.vibrate?.(ok ? 80 : [60, 60, 60]); } catch {}
     this.render();
     clearTimeout(this.resume);
-    this.resume = setTimeout(() => { this.cam.busy = !!this.pending; this.result = null; this.render(); }, ok ? 5000 : 4000);
+    this.resume = setTimeout(() => { this.result = null; this.render(); }, ok ? 5000 : 4000);
   },
   async release() {
-    const rel = this.releasing; rel.busy = true; this.render();
+    const rel = this.releasing; if (rel.busy) return; rel.busy = true; this.render();
     try {
       const r = await api('/api/lockers/me/release', { method: 'POST', body: { idempotency_key: rel.key, confirm: true, assignment_id: rel.assignment } });
       this.releasing = null;
@@ -283,16 +306,22 @@ root.addEventListener('click', ev => {
   if (a === 'retry-boot') return boot();
   if (a === 'reload') { Admin.notice = ''; return Admin.load(); }
   if (['print', 'print-all', 'form', 'form-cancel', 'form-ok', 'add'].includes(a)) return Admin.act(t);
-  if (a === 'cam-start') return Member.cam.start();
-  if (a === 'cam-stop') { Member.cam.stop(); return Member.render(); }
-  if (a === 'resend') return Member.send();
-  if (a === 'discard') { Member.pending = null; Member.cam.busy = false; return Member.render(); }
-  if (a === 'release') { Member.releasing = { key: key(), assignment: Member.me?.locker?.assignment_id }; Member.result = null; return Member.render(); }
-  if (a === 'release-cancel') { Member.releasing = null; return Member.render(); }
-  if (a === 'release-ok') return Member.release();
+  if (a === 'cam-start') return Personal.cam.start();
+  if (a === 'cam-stop') { Personal.cam.stop(); return Personal.render(); }
+  if (a === 'resend') return Personal.send();
+  if (a === 'qr-release' && !Personal.pending && !Personal.sending) {
+    Personal.qrRelease = Personal.me?.locker?.assignment_id;
+    Personal.result = null;
+    return Personal.render();
+  }
+  if (a === 'qr-cancel' && !Personal.pending && !Personal.sending) { Personal.qrRelease = null; return Personal.render(); }
+  if (a === 'discard' && !Personal.sending) { Personal.pending = null; return Personal.render(); }
+  if (a === 'release') { Personal.releasing = { key: key(), assignment: Personal.me?.locker?.assignment_id }; Personal.result = null; return Personal.render(); }
+  if (a === 'release-cancel') { Personal.releasing = null; return Personal.render(); }
+  if (a === 'release-ok') return Personal.release();
 });
-document.addEventListener('visibilitychange', () => { if (document.hidden && Member.cam?.active) { Member.cam.stop(); Member.render(); } });
-window.addEventListener('online', () => user?.role === 'member' ? Member.render() : user && Admin.load());
-window.addEventListener('offline', () => user?.role === 'member' && Member.render());
+document.addEventListener('visibilitychange', () => { if (document.hidden && (Personal.cam?.active || Personal.cam?.starting)) { Personal.cam.stop(); Personal.render(); } });
+window.addEventListener('online', () => Personal.cam ? Personal.load() : user?.role === 'admin' && Admin.load());
+window.addEventListener('offline', () => Personal.cam && Personal.render());
 boot();
 })();

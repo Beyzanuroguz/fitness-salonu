@@ -8,7 +8,8 @@ function qrContext({native=false,embedded=true}={}){
  const c={URLSearchParams,Date,console,FORMCLUB_CONFIG:{native},location:{search:embedded?'?embedded=1':'',hash:'#qr'},navigator:{onLine:true,serviceWorker:{}},window:{isSecureContext:true,V9Core:require(path.join(pub,'v9/v9-core.js')),addEventListener:(name,fn)=>windowEvents[name]=fn},document:{getElementById:id=>id==='v9-root'?root:null,addEventListener(){},hidden:false},setTimeout:(fn,ms)=>{timers.set(++serial,{fn,ms});return serial},clearTimeout:id=>timers.delete(id),setInterval:()=>0,clearInterval(){}};
  c.rootClick=ev=>events.click(ev);
  vm.createContext(c);
- const code=fs.readFileSync(path.join(pub,'v9/v9.js'),'utf8').replace(/init\(\);\s*\}\)\(\);\s*$/,`render=()=>{};paintQR=()=>{};sayQR=()=>{};tickQR=()=>{};updateScanUI=()=>{};globalThis.testQR={S,fetchQR,stopQR,stopCamera,setStream:value=>stream=value,click:rootClick,setAPI:fn=>api=fn};})();`);
+ vm.runInContext(fs.readFileSync(path.join(pub,'turnstiles/qr-camera.js'),'utf8'),c);
+ const code=fs.readFileSync(path.join(pub,'v9/v9.js'),'utf8').replace(/init\(\);\s*\}\)\(\);\s*$/,`render=()=>{};paintQR=()=>{};sayQR=()=>{};tickQR=()=>{};updateScanUI=()=>{};globalThis.testQR={S,fetchQR,stopQR,stopCamera,setStream:value=>entryCamera.stream=value,click:rootClick,setAPI:fn=>api=fn};})();`);
  vm.runInContext(code,c);return {...c.testQR,timers,windowEvents};
 }
 test('QR retries transient failures, clears retry state on success and never retries revoked access',async()=>{

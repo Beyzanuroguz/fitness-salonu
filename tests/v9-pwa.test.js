@@ -37,7 +37,7 @@ test('index links manifest, apple icon and every script it loads exists', () => 
 test('service worker precaches existing files, never caches /api/ and stays inside /v9/', () => {
   const sw = fs.readFileSync(file('/v9/sw.js'), 'utf8');
   const list = JSON.parse(sw.match(/SHELL_FILES = (\[[\s\S]*?\]);/)[1].replace(/'/g, '"'));
-  for (const p of list) { assert.ok(p.startsWith('/v9/'), p); assert.ok(fs.existsSync(file(p)), p); }
+  for (const p of list) { assert.ok(p.startsWith('/v9/') || p === '/turnstiles/qr-camera.js', p); assert.ok(fs.existsSync(file(p)), p); }
   assert.match(sw, /pathname\.startsWith\('\/api\/'\)\) return;/);
   assert.match(sw, /if \(!url\.pathname\.startsWith\('\/v9\/'\)\) return;/);
   assert.match(sw, /SKIP_WAITING/);

@@ -36,7 +36,7 @@ test('QR scanner explains HTTPS and permission denial', () => {
   const js = fs.readFileSync(path.join(pub, 'v9', 'v9.js'), 'utf8');
   assert.match(js, /HTTPS/);
   assert.match(js, /NotAllowedError/);
-  assert.match(js, /NotReadableError/);
+  assert.match(fs.readFileSync(path.join(pub, 'turnstiles', 'qr-camera.js'), 'utf8'), /NotReadableError/);
   const K = require(path.join(pub, 'v9', 'v9-core.js'));
   assert.match(K.scanErrorText({ status: 422, message: 'QR geçersiz, kullanılmış veya süresi dolmuş' }), /yeni kodu/);
   assert.match(K.scanErrorText({ status: 403, message: 'Aktif üyelik gerekli' }), /Üyelik aktif değil/);

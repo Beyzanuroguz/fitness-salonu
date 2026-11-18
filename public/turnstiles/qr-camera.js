@@ -17,54 +17,144 @@ function placeholder(state, startLabel) {
   if (!navigator.mediaDevices?.getUserMedia) return '<b>Bu cihaz veya tarayıcı kamera erişimini desteklemiyor.</b><br>Güncel Chrome (Android) ya da Safari (iPhone) ile dene veya resepsiyona başvur.';
   return `${startLabel}<br><button class="btn primary" data-act="cam-start" style="margin-top:12px" ${state.starting ? 'disabled' : ''}>${state.starting ? 'Kamera açılıyor…' : state.error ? 'Tekrar dene' : 'Kamerayı aç'}</button>`;
 }
-function create({ videoId = 'qr-video', onCode, onChange }) {
-  const cam = { active: false, starting: false, error: '', help: '', busy: false, stream: null, detector: null, loop: 0, canvas: null, last: '', lastAt: 0, gen: 0 };
+const formats = {
+  entry: /^[a-f0-9]{64}$/,
+  gate: /^FORMCLUB-GATE:1:[a-f0-9]{32}$/,
+  locker: /^FORMCLUB-LOCKER:1:[a-f0-9]{32}$/
+};
+
+function create({ videoId, accepts, onCode, onChange, repeatMs = 5000, busy = () => false }) {
+  const cam = { active: false, starting: false, error: '', help: '', busy: false, stream: null, detector: null };
   const video = () => document.getElementById(videoId);
+  const recent = new Map();
+  let generation = 0, timer = 0, running = false, canvas, context;
+  let candidate = '', hits = 0, latched = '', misses = 0;
+
   cam.start = async () => {
-    Object.assign(cam, { error: '', help: '', starting: true }); onChange();
+    if (cam.starting || cam.active) return;
+    const gen = ++generation;
+    Object.assign(cam, { error: '', help: '', starting: true });
+    onChange();
+    const ask = video => navigator.mediaDevices.getUserMedia({ video, audio: false });
     try {
-      try { cam.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false }); }
-      catch (e) { if (e?.name === 'OverconstrainedError') cam.stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false }); else throw e; }
-    } catch (e) { [cam.error, cam.help] = cameraError(e); cam.starting = false; return onChange(); }
-    cam.detector = null;
-    try { if ('BarcodeDetector' in window && (await window.BarcodeDetector.getSupportedFormats()).includes('qr_code')) cam.detector = new window.BarcodeDetector({ formats: ['qr_code'] }); } catch {}
-    if (!cam.detector && !window.jsQR) {
-      try { await new Promise((ok, no) => { const s = document.createElement('script'); s.src = '/v9/vendor/jsQR.js'; s.onload = ok; s.onerror = no; document.head.appendChild(s); }); }
-      catch { cam.stop(); Object.assign(cam, { error: 'QR çözücü yüklenemedi.', help: ' Bağlantını kontrol edip tekrar dene.' }); return onChange(); }
+      let stream;
+      try { stream = await ask({ facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }); }
+      catch (e) {
+        if (!['OverconstrainedError', 'ConstraintNotSatisfiedError'].includes(e?.name)) throw e;
+        stream = await ask(true);
+      }
+      if (gen !== generation || document.hidden) {
+        stream.getTracks().forEach(t => t.stop());
+        if (gen === generation) cam.stop();
+        return;
+      }
+      cam.stream = stream;
+    } catch (e) {
+      if (gen !== generation) return;
+      [cam.error, cam.help] = cameraError(e);
+      cam.starting = false;
+      return onChange(e);
     }
-    Object.assign(cam, { starting: false, active: true });
+    let detector = null;
+    try {
+      if ('BarcodeDetector' in window && (await window.BarcodeDetector.getSupportedFormats()).includes('qr_code'))
+        detector = new window.BarcodeDetector({ formats: ['qr_code'] });
+    } catch {}
+    if (!detector && !window.jsQR) {
+      try {
+        await new Promise((ok, no) => {
+          const script = document.createElement('script');
+          script.src = '/v9/vendor/jsQR.js';
+          script.onload = ok;
+          script.onerror = () => { script.remove(); no(); };
+          document.head.appendChild(script);
+        });
+      } catch {
+        if (gen !== generation) return;
+        cam.stop();
+        Object.assign(cam, { error: 'QR çözücü yüklenemedi.', help: ' Bağlantını kontrol edip tekrar dene.' });
+        return onChange();
+      }
+    }
+    if (gen !== generation) return;
+    Object.assign(cam, { starting: false, active: true, detector });
     onChange();
   };
-  // Call after every render: re-binds the live stream to the (possibly new) video element.
-  cam.attach = () => {
-    const v = video(); if (!cam.active || !v || !cam.stream) return;
-    if (v.srcObject !== cam.stream) { v.srcObject = cam.stream; v.play().catch(() => {}); }
-    clearTimeout(cam.loop); cam.loop = setTimeout(frame, 300);
-  };
-  async function frame() {
-    const v = video(), gen = cam.gen; if (!cam.active || !v || document.hidden) return;
-    if (!cam.busy && v.readyState >= 2) {
-      let text = '';
-      try {
-        if (cam.detector) text = (await cam.detector.detect(v))[0]?.rawValue || '';
-        else if (window.jsQR) {
-          const w = Math.min(640, v.videoWidth), h = Math.round(v.videoHeight * w / v.videoWidth);
-          const cv = cam.canvas = cam.canvas || document.createElement('canvas'); cv.width = w; cv.height = h;
-          const ctx = cv.getContext('2d', { willReadFrequently: true }); ctx.drawImage(v, 0, 0, w, h);
-          text = window.jsQR(ctx.getImageData(0, 0, w, h).data, w, h, { inversionAttempts: 'dontInvert' })?.data || '';
-        }
-      } catch {}
-      // Detection is async: drop the frame if the camera was stopped or the page hidden meanwhile.
-      if (gen !== cam.gen || !cam.active) return;
-      const code = String(text).trim(), now = Date.now();
-      // The camera sees the same code many times per second; one read per code every 5 s.
-      if (code && !document.hidden && !cam.busy && !(code === cam.last && now - cam.lastAt < 5000)) { cam.last = code; cam.lastAt = now; await onCode(code); }
+
+  function schedule() {
+    if (cam.active && !timer && !running) {
+      timer = setTimeout(() => {
+        timer = 0;
+        void frame();
+      }, 160);
     }
-    cam.loop = setTimeout(frame, 200);
   }
-  cam.stop = () => { cam.gen++; clearTimeout(cam.loop); cam.stream?.getTracks().forEach(t => t.stop()); cam.stream = null; cam.active = false; };
+
+  // Bind after render, keeping the existing video and its stream whenever possible.
+  cam.attach = () => {
+    const v = video();
+    if (!cam.active || !v || !cam.stream) return;
+    if (v.srcObject !== cam.stream) { v.srcObject = cam.stream; v.play().catch(() => {}); }
+    schedule();
+  };
+
+  async function decode(v) {
+    if (cam.detector) {
+      const codes = await cam.detector.detect(v);
+      return codes.length === 1 ? codes[0].rawValue : '';
+    }
+    if (!canvas) {
+      canvas = document.createElement('canvas');
+      context = canvas.getContext('2d', { willReadFrequently: true });
+    }
+    const w = Math.min(640, v.videoWidth), h = Math.round(v.videoHeight * w / v.videoWidth);
+    if (canvas.width !== w) canvas.width = w;
+    if (canvas.height !== h) canvas.height = h;
+    context.drawImage(v, 0, 0, w, h);
+    return window.jsQR(context.getImageData(0, 0, w, h).data, w, h, { inversionAttempts: 'dontInvert' })?.data;
+  }
+
+  async function frame() {
+    const v = video(), gen = generation;
+    if (!cam.active || !v || document.hidden) return;
+    running = true;
+    try {
+      if (cam.busy || busy() || v.readyState < 2 || !v.videoWidth || !v.videoHeight) return;
+      let text;
+      try { text = await decode(v); } catch {}
+      if (gen !== generation || document.hidden || v !== video() || cam.busy || busy()) return;
+      const code = String(text ?? '').trim();
+      const valid = accepts(code);
+      if (latched && code !== latched && ++misses >= 3) latched = '';
+      if (code === latched) misses = 0;
+      if (!valid) { candidate = ''; hits = 0; return; }
+      if (candidate !== code) { candidate = code; hits = 0; }
+      if (++hits < 2 || code === latched) return;
+      // Rearm only after the code leaves the frame. A short cache also covers intermittent reads.
+      latched = code;
+      misses = 0;
+      const now = Date.now();
+      for (const [value, until] of recent) if (until <= now) recent.delete(value);
+      if (recent.has(code)) return;
+      recent.set(code, now + repeatMs);
+      await onCode(code);
+    } finally {
+      running = false;
+      schedule();
+    }
+  }
+
+  cam.stop = () => {
+    generation++;
+    clearTimeout(timer);
+    timer = 0;
+    candidate = '';
+    hits = 0;
+    cam.stream?.getTracks().forEach(t => t.stop());
+    Object.assign(cam, { stream: null, active: false, starting: false });
+  };
   cam.view = startLabel => cam.active ? `<video id="${videoId}" playsinline muted autoplay aria-label="Kamera görüntüsü"></video><div class="reticle" aria-hidden="true"></div>` : `<div class="placeholder">${placeholder(cam, startLabel)}</div>`;
   return cam;
 }
-window.FormclubQrCamera = { create, cameraError };
+window.FormclubQrCamera = { create, cameraError, formats };
 })();
