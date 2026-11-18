@@ -13,7 +13,7 @@ async function boot(env){
  const child=spawn(process.execPath,['server.js'],{cwd:root,env,stdio:['ignore','pipe','pipe']});let out='';child.stderr.on('data',b=>out+=b);
  await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('startup timeout')),8000);child.stdout.on('data',b=>{out+=b;if(out.includes('listening')){clearTimeout(timer);resolve()}});child.once('exit',()=>{clearTimeout(timer);reject(Error('startup refused'))})});
  const port=JSON.parse(out.trim().split('\n').find(l=>l.includes('listening'))).port;
- return {base:`http://127.0.0.1:${port}`,logs:()=>out,stop:async()=>{if(child.exitCode!==null)return;const done=once(child,'exit');child.kill('SIGTERM');await done}};
+ return {base:`http://127.0.0.1:${port}`,logs:()=>out,stop:async()=>{if(child.exitCode!==null || child.signalCode!==null)return;const done=once(child,'exit');child.kill('SIGTERM');await done}};
 }
 async function call(base,url,method='GET',body,cookie,origin=ORIGIN){const r=await fetch(base+url,{method,headers:{'content-type':'application/json',origin,...(cookie?{cookie}:{})},body:method==='GET'?undefined:JSON.stringify(body||{})});return {status:r.status,headers:r.headers,data:await r.json().catch(()=>null),cookie:r.headers.get('set-cookie')?.split(';')[0]};}
 
@@ -25,7 +25,7 @@ test('render demo config requires production security, secrets, synthetic-only a
 });
 
 test('render demo boots on 0.0.0.0 with synthetic data, role logins, CSRF/CORS guards and no public setup',async t=>{
- const {env}=fixture(t);const app=await boot(env);t.after(app.stop);
+ const {env}=fixture(t);const app=await boot(env);
  const health=await call(app.base,'/healthz');assert.deepEqual(health.data,{status:'ok'});assert.equal(health.headers.get('x-robots-tag'),'noindex, nofollow, noarchive');
  assert.equal(await (await fetch(app.base+'/robots.txt')).text(),'User-agent: *\nDisallow: /\n');
  assert.equal((await call(app.base,'/api/me')).data.setup,false);
@@ -42,12 +42,12 @@ test('render demo boots on 0.0.0.0 with synthetic data, role logins, CSRF/CORS g
 });
 
 test('render demo resets on restart and refuses to touch a non-demo database',async t=>{
- const {dir,env}=fixture(t);let app=await boot(env);
+ const {dir,env}=fixture(t);let app=await boot(env);t.after(()=>app.stop());
  const login=await call(app.base,'/api/login','POST',{username:'demo-admin',password:env.DEMO_ADMIN_PASSWORD});
  const before=(await call(app.base,'/api/state','GET',null,login.cookie)).data.members.length;
  assert.equal((await call(app.base,'/api/members','POST',{name:'Geçici Kayıt',expires:'2099-01-01'},login.cookie)).status,200);
  assert.equal((await call(app.base,'/api/state','GET',null,login.cookie)).data.members.length,before+1);
- await app.stop();app=await boot(env);t.after(app.stop);
+ await app.stop();app=await boot(env);
  assert.equal((await call(app.base,'/api/state','GET',null,login.cookie)).status,401);
  const again=await call(app.base,'/api/login','POST',{username:'demo-admin',password:env.DEMO_ADMIN_PASSWORD});
  assert.equal((await call(app.base,'/api/state','GET',null,again.cookie)).data.members.length,before);
@@ -57,7 +57,7 @@ test('render demo resets on restart and refuses to touch a non-demo database',as
 });
 
 test('render demo: virtual turnstiles work with demo accounts, stay simulation-only and get new QR ids on every restart',async t=>{
- const {env}=fixture(t);let app=await boot(env);
+ const {env}=fixture(t);let app=await boot(env);t.after(()=>app.stop());
  const login=async role=>(await call(app.base,'/api/login','POST',{username:'demo-'+role,password:env[`DEMO_${role.toUpperCase()}_PASSWORD`]})).cookie;
  let admin=await login('admin');const member=await login('member');
  const first=(await call(app.base,'/api/turnstiles','GET',null,admin)).data;assert.equal(first.simulation,true);assert.equal(first.turnstiles.length,3);
@@ -65,14 +65,14 @@ test('render demo: virtual turnstiles work with demo accounts, stay simulation-o
  assert.deepEqual([pass.ok,pass.direction,pass.turnstile],[true,'in','Turnike 2']);
  assert.equal((await call(app.base,'/api/turnstiles','GET',null,admin)).data.inside_count,1);
  assert.equal((await call(app.base,'/api/turnstiles/scan','POST',{code:first.turnstiles[1].qr,idempotency_key:'render-demo-0002'},admin)).status,403);
- await app.stop();app=await boot(env);t.after(app.stop);admin=await login('admin');
+ await app.stop();app=await boot(env);admin=await login('admin');
  const second=(await call(app.base,'/api/turnstiles','GET',null,admin)).data;
  assert.equal(second.inside_count,0,'presence reset with the ephemeral DB');
  for(let i=0;i<3;i++)assert.notEqual(second.turnstiles[i].qr,first.turnstiles[i].qr,'printed codes stop working after a restart');
  for(const k of ['DEMO_ADMIN_PASSWORD','DEMO_TEACHER_PASSWORD','DEMO_MEMBER_PASSWORD'])assert.ok(!app.logs().includes(env[k]));
 });
 test('render demo: virtual lockers work after a turnstile entry, say they are ephemeral and reset QR ids and logs on restart',async t=>{
- const {env}=fixture(t);let app=await boot(env);
+ const {env}=fixture(t);let app=await boot(env);t.after(()=>app.stop());
  const login=async role=>(await call(app.base,'/api/login','POST',{username:'demo-'+role,password:env[`DEMO_${role.toUpperCase()}_PASSWORD`]})).cookie;
  let admin=await login('admin');const member=await login('member');
  const first=(await call(app.base,'/api/lockers','GET',null,admin)).data;
@@ -81,8 +81,11 @@ test('render demo: virtual lockers work after a turnstile entry, say they are ep
  assert.equal((await call(app.base,'/api/turnstiles/scan','POST',{code:gate,idempotency_key:'render-lock-0001'},member)).data.direction,'in');
  const claim=(await call(app.base,'/api/lockers/claim','POST',{code:first.lockers[2].qr,idempotency_key:'render-lock-0002'},member)).data;
  assert.deepEqual([claim.ok,claim.locker],[true,'Dolap 3']);
- assert.equal((await call(app.base,'/api/lockers/claim','POST',{code:first.lockers[2].qr,idempotency_key:'render-lock-0003'},admin)).status,403);
- await app.stop();app=await boot(env);t.after(app.stop);admin=await login('admin');
+ const occupied=await call(app.base,'/api/lockers/claim','POST',{code:first.lockers[2].qr,idempotency_key:'render-lock-0003'},admin);
+ assert.equal(occupied.status,200);assert.equal(occupied.data.reason,'occupied');
+ const adminClaim=await call(app.base,'/api/lockers/claim','POST',{code:first.lockers[3].qr,idempotency_key:'render-lock-0004'},admin);
+ assert.equal(adminClaim.status,200);assert.deepEqual([adminClaim.data.ok,adminClaim.data.locker],[true,'Dolap 4']);
+ await app.stop();app=await boot(env);admin=await login('admin');
  const second=(await call(app.base,'/api/lockers','GET',null,admin)).data;
  assert.equal(second.counts.occupied,0);assert.equal(second.events.length,0,'demo locker logs reset');
  for(let i=0;i<20;i++)assert.notEqual(second.lockers[i].qr,first.lockers[i].qr,'printed demo locker codes stop working after a restart');

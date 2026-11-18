@@ -24,10 +24,3 @@ jobs:
           node-version: '24'
       - name: Run all tests
         run: timeout 90s ${{ matrix.command }}
-      - name: Isolate a stalled test file
-        if: failure() && matrix.suite == 'Main'
-        run: |
-          for file in test/*.test.js tests/*.test.js mobile/test/*.test.js; do
-            (timeout 25s node --test "$file" > "/tmp/${file//\//_}.log" 2>&1; result=$?; if [ "$result" -ne 0 ]; then printf '\n%s (exit %s)\n' "$file" "$result"; tail -100 "/tmp/${file//\//_}.log"; fi) &
-          done
-          wait
