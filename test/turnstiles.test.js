@@ -141,12 +141,19 @@ test('HTTP: session, CSRF, JSON-only, no CORS, static module under CSP, menu ent
   for (const p of ['/turnstiles/', '/turnstiles/turnstiles.js', '/turnstiles/turnstiles.css']) { const r = await req(p); assert.equal(r.status, 200, p); assert.match(r.headers.get('content-security-policy'), /script-src 'self'/); }
   const html = await (await req('/turnstiles/')).text();
   assert.doesNotMatch(html, /<script>|\son[a-z]+="/, 'no inline script or handlers');
+  assert.match(html, /<script src="\/turnstiles\/qr-camera\.js"><\/script>/);
+  const camera = await req('/turnstiles/qr-camera.js');
+  assert.equal(camera.status, 200);
+  assert.match(camera.headers.get('content-security-policy'), /script-src 'self'/);
+  const cameraJs = await camera.text();
+  assert.match(cameraJs, /Kamera izni verilmedi/);
+  assert.match(cameraJs, /desteklemiyor/);
   await req('/api/logout', 'POST', {}, member); assert.equal((await req('/api/turnstiles/me', 'GET', null, member)).status, 401);
   const app = fs.readFileSync(path.join(__dirname, '../public/app.js'), 'utf8');
   assert.match(app, /navItems\.admin\.push\(\['turnstiles','⇆','Turnikeler'\]\);navItems\.member\.push\(\['gate','⇆','Turnike QR Tara'\]\)/);
   assert.doesNotMatch(app, /navItems\.teacher\.push\(\['(?:turnstiles|gate)'/);
   const js = fs.readFileSync(path.join(__dirname, '../public/turnstiles/turnstiles.js'), 'utf8');
-  assert.match(js, /SİMÜLASYON/); assert.match(js, /kopyalanabilir/); assert.match(js, /Kamera izni verilmedi/); assert.match(js, /desteklemiyor/); assert.match(js, /Bağlantı yok/);
+  assert.match(js, /SİMÜLASYON/); assert.match(js, /kopyalanabilir/); assert.match(js, /Bağlantı yok/);
 });
 
 test('UI renders admin gate cards with QR SVG and the member scanner with history (vm, no browser)', async () => {

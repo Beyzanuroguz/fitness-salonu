@@ -25,7 +25,7 @@ test('render demo config requires production security, secrets, synthetic-only a
 });
 
 test('render demo boots on 0.0.0.0 with synthetic data, role logins, CSRF/CORS guards and no public setup',async t=>{
- const {env}=fixture(t);const app=await boot(env);
+ const {env}=fixture(t);const app=await boot(env);t.after(app.stop);
  const health=await call(app.base,'/healthz');assert.deepEqual(health.data,{status:'ok'});assert.equal(health.headers.get('x-robots-tag'),'noindex, nofollow, noarchive');
  assert.equal(await (await fetch(app.base+'/robots.txt')).text(),'User-agent: *\nDisallow: /\n');
  assert.equal((await call(app.base,'/api/me')).data.setup,false);

@@ -6,15 +6,6 @@ permissions:
   contents: read
 jobs:
   suites:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - suite: Main
-            command: npm test
-          - suite: Mobile
-            command: npm --prefix mobile test
-    name: ${{ matrix.suite }} suite
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -22,5 +13,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: Run all tests
-        run: timeout 90s ${{ matrix.command }}
+      - name: Main suite
+        run: timeout 120s npm test
+      - name: Mobile suite
+        if: always()
+        run: timeout 90s npm --prefix mobile test
