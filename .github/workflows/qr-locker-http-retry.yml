@@ -1,7 +1,7 @@
 name: QR locker full test retry
 on:
-  push:
-    branches: [test/qr-locker-v3-http]
+  pull_request:
+    branches: [feature/qr-locker-v3]
 permissions:
   contents: read
 jobs:
@@ -13,8 +13,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: Verify loopback HTTP bind
-        run: node -e "const s=require('node:http').createServer();s.listen(0,'127.0.0.1',()=>{console.log(s.address());s.close()})"
       - name: Main suite
         run: npm test
       - name: Mobile suite
