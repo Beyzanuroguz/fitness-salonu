@@ -99,3 +99,6 @@ Blueprint yerine panelden elle kurulum (**New > Web Service**):
   HTTPS sağlar.
 - Bu mod üretim için değildir. Üretim kurulumunun kalıcı ve korumalı disk şartları
   (`PRODUCTION_READINESS.md`, `deploy/`) değişmedi.
+- **Sanal dolaplar (`LOCKER_MANAGEMENT.md`) de geçicidir.** Her yeniden başlatmada 20 dolap
+  yeni QR kimlikleriyle yeniden kurulur; tahsisler, uyarılar ve dolap logları silinir. Basılı
+  demo dolap kodları geçersiz olur; Dolap Yönetimi ekranından yeniden yazdırın.

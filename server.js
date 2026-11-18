@@ -235,7 +235,9 @@ const nutrition = require('./backend/nutrition')(db);
 const nutritionPlus = require('./backend/nutrition-plus')(db);
 const v9 = require('./backend/v9')(db);
 // Virtual turnstiles: SIMULATION ONLY, no hardware control (backend/turnstiles.js).
-const turnstiles = require('./backend/turnstiles')(db);
+// Virtual lockers V1: SIMULATION ONLY, no lock control (backend/lockers.js). Uses gate_presence for in/out.
+const lockers = require('./backend/lockers')(db, { ephemeral: config.renderDemo });
+const turnstiles = require('./backend/turnstiles')(db, { locker: lockers.gate });
 const mime={'.html':'text/html; charset=utf-8','.js':'application/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.ico':'image/x-icon','.webmanifest':'application/manifest+json'};
 const authLimit=security.createLimiter();
 const apiLimit=security.createLimiter({limit:600,windowMs:60000});
@@ -275,6 +277,7 @@ const server=http.createServer(async(req,res)=>{security.headers(res,config);try
   }
   if(!u&&url.pathname!=='/api/me'){const e=Error('Oturum açmanız gerekiyor');e.status=401;throw e}
   if(url.pathname==='/api/turnstiles'||url.pathname.startsWith('/api/turnstiles/')) return send(res,200,turnstiles(req.method,url.pathname,req.method==='GET'?{}:body,u));
+  if(url.pathname==='/api/lockers'||url.pathname.startsWith('/api/lockers/')) return send(res,200,lockers(req.method,url.pathname,req.method==='GET'?{}:body,u));
   if(url.pathname.startsWith('/api/nutrition-plus/')) return send(res,200,await nutritionPlus(req.method,url.pathname,req.method==='GET'?Object.fromEntries(url.searchParams):body,u));
   if(url.pathname.startsWith('/api/v8/')) return send(res,200,await nutrition(req.method,url.pathname,req.method==='GET'?Object.fromEntries(url.searchParams):body,u));
   return send(res,200,api(req.method,url.pathname,req.method==='GET'?{...body,member_id:url.searchParams.get('member_id')}:body,u));

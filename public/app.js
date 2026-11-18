@@ -30,10 +30,12 @@ navItems.member.push(['notifications','◉','Bildirimler']);
 for(const r of ['admin','member','teacher'])navItems[r].push(['energy','◎','Kalori hedefim']);
 // Virtual turnstiles (simulation): admin manages gate QR codes, members scan them with the phone camera.
 navItems.admin.push(['turnstiles','⇆','Turnikeler']);navItems.member.push(['gate','⇆','Turnike QR Tara']);
+// Virtual lockers V1 (simulation): admin manages lockers; members scan a locker QR after a turnstile entry.
+navItems.admin.push(['lockers','▦','Dolap Yönetimi']);navItems.member.push(['lockerScan','▦','Dolap QR Tara'],['locker','▣','Dolabım']);
 // Menu sections per role. Every navItems entry belongs to exactly one section (checked by tests).
 const navGroups={
- admin:[['Genel',['overview','insights','reports']],['Üyeler',['members','renewals','leads']],['Dersler',['classes','reservations','attendance']],['Giriş ve bildirimler',['scan','turnstiles','notifications']],['Ekip',['trainers','performance']],['İletişim',['announcements','community']],['Finans',['payments']],['Beslenme',['nutrition','energy']],['Yönetim',['settings']]],
- member:[['Genel',['home','gate']],['Dersler',['lessons','memberCalendar','entry']],['Sağlık ve beslenme',['nutrition','energy','progress']],['Topluluk',['community','notifications']],['Hesap',['profile']]],
+ admin:[['Genel',['overview','insights','reports']],['Üyeler',['members','renewals','leads']],['Dersler',['classes','reservations','attendance']],['Giriş ve bildirimler',['scan','turnstiles','lockers','notifications']],['Ekip',['trainers','performance']],['İletişim',['announcements','community']],['Finans',['payments']],['Beslenme',['nutrition','energy']],['Yönetim',['settings']]],
+ member:[['Genel',['home','gate','lockerScan','locker']],['Dersler',['lessons','memberCalendar','entry']],['Sağlık ve beslenme',['nutrition','energy','progress']],['Topluluk',['community','notifications']],['Hesap',['profile']]],
  teacher:[['Genel',['today']],['Dersler',['calendar','attendance','students']],['Performans',['performance']],['Topluluk',['community','notifications']],['Sağlık',['energy']],['Hesap',['profile']]]
 };
 const roleNames={admin:'Yönetici',member:'Üye',teacher:'Eğitmen'};
@@ -50,13 +52,14 @@ function moduleFrame(src,title){if(!navigator.onLine)return `<section class="pan
 let moduleTimer=0;
 function bindModuleFrame(){const frame=app.querySelector?.('.module-frame'),status=app.querySelector?.('.module-loading');if(!frame||!status)return;clearTimeout(moduleTimer);frame.addEventListener('load',()=>{clearTimeout(moduleTimer);status.hidden=true},{once:true});moduleTimer=setTimeout(()=>{if(status.hidden)return;status.innerHTML='<span>Bölüm geç yükleniyor. Bağlantını kontrol et.</span> <button class="btn small" type="button" data-act="reloadmodule">Yeniden yükle</button>'},15000)}
 // Phone bottom bar: the most used pages per role plus the full menu.
-const tabItems={admin:['overview','members','scan','notifications'],teacher:['today','attendance','calendar','notifications'],member:['home','lessons','entry','notifications']};
-function tabBar(items){const list=(tabItems[role]||[]).map(id=>items.find(x=>x[0]===id)).filter(Boolean);const short={overview:'Özet',members:'Üyeler',scan:'QR okut',notifications:'Bildirim',today:'Bugün',attendance:'Yoklama',calendar:'Takvim',home:'Ana sayfa',lessons:'Dersler',entry:'QR giriş'};const inTabs=list.some(x=>x[0]===page);return `<nav class="tabbar" aria-label="Hızlı menü">${list.map(x=>`<button class="tab ${page===x[0]?'active':''}" ${page===x[0]?'aria-current="page"':''} data-page="${x[0]}"><span class="ico" aria-hidden="true">${x[1]}</span><span>${short[x[0]]||x[2]}</span></button>`).join('')}<button class="tab ${inTabs?'':'active'}" type="button" data-act="menu" aria-controls="app-drawer" aria-expanded="false"><span class="ico" aria-hidden="true">☰</span><span>Menü</span></button></nav>`}
+const tabItems={admin:['overview','members','scan','notifications'],teacher:['today','attendance','calendar','notifications'],member:['home','gate','locker','lessons']};
+function tabBar(items){const list=(tabItems[role]||[]).map(id=>items.find(x=>x[0]===id)).filter(Boolean);const short={overview:'Özet',members:'Üyeler',scan:'QR okut',notifications:'Bildirim',today:'Bugün',attendance:'Yoklama',calendar:'Takvim',home:'Ana sayfa',lessons:'Dersler',entry:'QR giriş',gate:'Turnike',locker:'Dolabım'};const inTabs=list.some(x=>x[0]===page);return `<nav class="tabbar" aria-label="Hızlı menü">${list.map(x=>`<button class="tab ${page===x[0]?'active':''}" ${page===x[0]?'aria-current="page"':''} data-page="${x[0]}"><span class="ico" aria-hidden="true">${x[1]}</span><span>${short[x[0]]||x[2]}</span></button>`).join('')}<button class="tab ${inTabs?'':'active'}" type="button" data-act="menu" aria-controls="app-drawer" aria-expanded="false"><span class="ico" aria-hidden="true">☰</span><span>Menü</span></button></nav>`}
 // iOS Safari has no install prompt; explain "Ana Ekrana Ekle" once until dismissed.
 function installHint(){try{const nav=globalThis.navigator||{},standalone=globalThis.matchMedia?.('(display-mode: standalone)').matches||nav.standalone===true,ios=/iphone|ipad|ipod/i.test(nav.userAgent||'')||(nav.platform==='MacIntel'&&nav.maxTouchPoints>1);if(!ios||standalone||localStorage.getItem('formclub:ios-hint')==='1')return ''}catch{return ''}return `<div class="install-hint" role="note"><span>Uygulama gibi kullanmak için Safari'de <b>Paylaş</b> › <b>Ana Ekrana Ekle</b>.</span><button class="close" data-act="hidehint" aria-label="İpucunu kapat">×</button></div>`}
 function content(){
  if(page==='nutrition')return energySummary()+moduleFrame('/nutrition/?embedded=1','Nutrition+');
  if(page==='energy')return energyView();
+ if(['lockers','lockerScan','locker'].includes(page))return moduleFrame('/lockers/?embedded=1#'+page,navItems[role].find(x=>x[0]===page)?.[2]||page);
  if(page==='turnstiles'||page==='gate')return moduleFrame('/turnstiles/?embedded=1#'+page,navItems[role].find(x=>x[0]===page)?.[2]||page);
  if(['entry','scan','performance','notifications'].includes(page))return moduleFrame('/v9/index.html?embedded=1#'+(page==='entry'?'qr':page),navItems[role].find(x=>x[0]===page)?.[2]||page);
  if(page==='renewals')return memberList();

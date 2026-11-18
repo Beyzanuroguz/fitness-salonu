@@ -1,0 +1,22 @@
+/* FORM CLUB virtual lockers (simulation). Builds on /turnstiles/turnstiles.css. */
+.locker-grid{grid-template-columns:repeat(auto-fill,minmax(210px,1fr))}
+.locker-card .qr{max-width:150px}
+.locker-card h2{font-size:18px;margin:0}
+.pill.st-available{background:var(--ok-bg);color:var(--ok)}
+.pill.st-occupied{background:#1d2c3d;color:#9ecbff}
+.pill.st-maintenance{background:var(--warn-bg);color:var(--warn)}
+.pill.st-inactive{background:var(--bad-bg);color:var(--bad)}
+.pill.alert{background:var(--bad-bg);color:var(--bad);margin-left:4px}
+.locker-card.st-inactive .qr,.locker-card.st-maintenance .qr{opacity:.4}
+.locker-card .who{min-height:38px;margin:6px 0}
+.locker-card .row .btn{flex:1 1 auto;min-height:40px;padding:8px 10px;font-size:13px}
+.stat.s-available strong{color:var(--ok)}.stat.s-occupied strong{color:#9ecbff}.stat.s-maintenance strong{color:var(--warn)}.stat.s-inactive strong{color:var(--bad)}
+.form-card label{display:block;font-weight:700;margin:10px 0 4px}
+.form-card select,.form-card input,.form-card textarea{width:100%;min-height:44px;border-radius:10px;border:1px solid #3a4a3e;background:#0f1611;color:var(--text);padding:10px;font:inherit}
+.form-card textarea{min-height:70px;resize:vertical}
+.big{font-size:34px;font-weight:900;color:var(--accent);margin:4px 0}
+.warn{background:var(--warn-bg);color:var(--warn)}
+.filters{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 12px}
+.filters .btn{min-height:36px;padding:6px 12px;font-size:13px}
+.filters .btn[aria-pressed="true"]{background:var(--accent);color:#0b100d;border-color:var(--accent)}
+@media print{.locker-card .who,.locker-card .pill{display:none!important}.locker-grid{display:block}}

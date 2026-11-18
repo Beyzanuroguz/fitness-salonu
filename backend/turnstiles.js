@@ -17,7 +17,8 @@ const REASONS = {
 };
 const newCode = () => randomBytes(16).toString('hex');
 
-module.exports = function createTurnstiles(db, { clock = Date.now, cooldownMs = 20000, scanLimit = 20 } = {}) {
+// locker (optional): backend/lockers.js gate hook. Exit is never blocked; it only adds a warning.
+module.exports = function createTurnstiles(db, { clock = Date.now, cooldownMs = 20000, scanLimit = 20, locker = null } = {}) {
   db.exec(`CREATE TABLE IF NOT EXISTS gate_turnstiles(id INTEGER PRIMARY KEY, name TEXT NOT NULL,
     code TEXT NOT NULL UNIQUE, active INTEGER NOT NULL DEFAULT 1, code_rotated_at INTEGER NOT NULL);
   CREATE TABLE IF NOT EXISTS gate_presence(member_id INTEGER PRIMARY KEY REFERENCES members(id),
@@ -41,7 +42,10 @@ module.exports = function createTurnstiles(db, { clock = Date.now, cooldownMs = 
     JOIN members m ON m.id=e.member_id LEFT JOIN gate_turnstiles t ON t.id=e.turnstile_id ${where}
     ORDER BY e.created_at DESC, e.id DESC LIMIT 50`).all(...args).map(eventRow);
   const outcome = e => ({ ok: e.result === 'ok', direction: e.direction, reason: e.reason, message: e.reason ? REASONS[e.reason] : null,
-    turnstile: e.turnstile_id ? db.prepare('SELECT name FROM gate_turnstiles WHERE id=?').get(e.turnstile_id)?.name : null, at: e.created_at, simulation: true });
+    turnstile: e.turnstile_id ? db.prepare('SELECT name FROM gate_turnstiles WHERE id=?').get(e.turnstile_id)?.name : null, at: e.created_at, simulation: true,
+    locker_warning: locker && e.result === 'ok' && e.direction === 'out' ? lockerNotice(e.id) : null });
+  // A failing locker lookup must never turn a recorded exit into an error response.
+  const lockerNotice = id => { try { return locker.notice(id); } catch { return null; } };
   const admin = u => { if (u.role !== 'admin') fail('Yönetici yetkisi gerekli', 403); };
 
   function scan(u, body) {
@@ -79,6 +83,12 @@ module.exports = function createTurnstiles(db, { clock = Date.now, cooldownMs = 
           db.prepare(`INSERT INTO gate_presence(member_id,inside,changed_at,turnstile_id) VALUES(?,?,?,?)
             ON CONFLICT(member_id) DO UPDATE SET inside=excluded.inside,changed_at=excluded.changed_at,turnstile_id=excluded.turnstile_id`)
             .run(u.member_id, direction === 'in' ? 1 : 0, now, gate.id);
+          // Locker bookkeeping must never undo a physical exit: isolate it in a savepoint.
+          if (locker && direction === 'out') {
+            db.exec('SAVEPOINT locker_exit');
+            try { locker.onExit(event, u); db.exec('RELEASE locker_exit'); }
+            catch { db.exec('ROLLBACK TO locker_exit'); db.exec('RELEASE locker_exit'); console.error(JSON.stringify({ event: 'locker_exit_hook_failed' })); }
+          }
         }
       }
       db.exec('COMMIT');
@@ -93,7 +103,7 @@ module.exports = function createTurnstiles(db, { clock = Date.now, cooldownMs = 
     if (method === 'GET' && route === '/me') {
       if (u.role !== 'member' || !u.member_id) fail('Üye hesabı gerekli', 403);
       const p = db.prepare('SELECT inside,changed_at FROM gate_presence WHERE member_id=?').get(u.member_id);
-      return { inside: !!p?.inside, since: p?.changed_at ?? null, cooldown_seconds: cooldownMs / 1000, events: events('WHERE e.member_id=?', u.member_id), simulation: true };
+      return { inside: !!p?.inside, since: p?.changed_at ?? null, cooldown_seconds: cooldownMs / 1000, events: events('WHERE e.member_id=?', u.member_id), locker: locker ? locker.current(u.member_id) : null, simulation: true };
     }
     if (method === 'GET' && route === '') {
       admin(u);

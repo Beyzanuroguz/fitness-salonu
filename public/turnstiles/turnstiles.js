@@ -94,7 +94,7 @@ const Admin = {
 
 /* ---------- Member gate scanner ---------- */
 const Gate = {
-  me: null, error: '', cam: { active: false, starting: false, error: '', help: '' }, result: null, busy: false,
+  me: null, error: '', warning: null, cam: { active: false, starting: false, error: '', help: '' }, result: null, busy: false,
   last: '', lastAt: 0, pending: null, stream: null, detector: null, loop: 0, resume: 0, canvas: null,
   async start() { await this.load(); },
   async load() {
@@ -112,6 +112,7 @@ const Gate = {
   ${SIM}
   ${this.error ? `<div class="notice bad" role="alert"><b>Durum alınamadı</b>${esc(this.error)}</div>` : ''}
   ${online ? '' : '<div class="notice bad" role="alert"><b>Bağlantı yok</b>Geçiş sunucuda onaylanır. İnternet gelince tekrar okut.</div>'}
+  ${this.warning ? `<div class="notice bad" role="alert"><b>Dolabın hâlâ sende</b>${esc(this.warning.message)}<div class="row" style="margin-top:8px"><a class="btn" href="/#locker" target="_top">Dolabım</a><button class="btn" data-act="warn-ok">Anladım</button></div></div>` : m?.inside && m?.locker ? `<div class="notice info" role="note"><b>${esc(m.locker.label)} sende</b>Çıkmadan önce “Dolabım” ekranından dolabı bırakmayı unutma. Çıkışın engellenmez.</div>` : ''}
   <section class="card"><div class="presence"><span class="dot ${m?.inside ? 'in' : ''}" aria-hidden="true"></span>${m ? (m.inside ? 'Şu an salondasın' : 'Şu an dışarıdasın') : 'Durum bilinmiyor'}</div>
     <p class="muted small" style="margin:6px 0 0">${m?.inside ? 'Herhangi bir turnikeyi okutunca ÇIKIŞ kaydedilir.' : 'Herhangi bir turnikeyi okutunca GİRİŞ kaydedilir.'} Ders rezervasyonun veya ders hakkın etkilenmez.</p></section>
   <section class="card"><div class="scanner" id="scanner">${c.active ? '<video id="gate-video" playsinline muted autoplay aria-label="Kamera görüntüsü"></video><div class="reticle" aria-hidden="true"></div>' : `<div class="placeholder">${placeholder}</div>`}
@@ -179,6 +180,7 @@ const Gate = {
     try {
       const r = await api('/api/turnstiles/scan', { method: 'POST', body: { code: this.pending.code, idempotency_key: this.pending.key } });
       this.pending = null;
+      if (r.locker_warning) this.warning = r.locker_warning;
       if (r.ok) this.show(true, `${DIR[r.direction].toUpperCase()} kaydedildi`, `${r.turnstile} · ${new Date(r.at).toLocaleTimeString('tr-TR')} · simülasyon`);
       else this.show(false, 'Geçiş reddedildi', r.message);
       if (r.ok) this.stopCamera();
@@ -217,6 +219,7 @@ root.addEventListener('click', ev => {
   if (a === 'cam-stop') { Gate.stopCamera(); return Gate.render(); }
   if (a === 'resend') return Gate.send();
   if (a === 'discard') { Gate.pending = null; return Gate.render(); }
+  if (a === 'warn-ok') { Gate.warning = null; return Gate.render(); }
 });
 document.addEventListener('visibilitychange', () => { if (document.hidden && Gate.cam.active) { Gate.stopCamera(); Gate.render(); } });
 window.addEventListener('online', () => user?.role === 'member' ? Gate.render() : user && Admin.load());

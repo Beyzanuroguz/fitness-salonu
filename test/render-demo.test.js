@@ -71,3 +71,19 @@ test('render demo: virtual turnstiles work with demo accounts, stay simulation-o
  for(let i=0;i<3;i++)assert.notEqual(second.turnstiles[i].qr,first.turnstiles[i].qr,'printed codes stop working after a restart');
  for(const k of ['DEMO_ADMIN_PASSWORD','DEMO_TEACHER_PASSWORD','DEMO_MEMBER_PASSWORD'])assert.ok(!app.logs().includes(env[k]));
 });
+test('render demo: virtual lockers work after a turnstile entry, say they are ephemeral and reset QR ids and logs on restart',async t=>{
+ const {env}=fixture(t);let app=await boot(env);
+ const login=async role=>(await call(app.base,'/api/login','POST',{username:'demo-'+role,password:env[`DEMO_${role.toUpperCase()}_PASSWORD`]})).cookie;
+ let admin=await login('admin');const member=await login('member');
+ const first=(await call(app.base,'/api/lockers','GET',null,admin)).data;
+ assert.equal(first.lockers.length,20);assert.equal(first.ephemeral,true);assert.equal(first.simulation,true);
+ const gate=(await call(app.base,'/api/turnstiles','GET',null,admin)).data.turnstiles[0].qr;
+ assert.equal((await call(app.base,'/api/turnstiles/scan','POST',{code:gate,idempotency_key:'render-lock-0001'},member)).data.direction,'in');
+ const claim=(await call(app.base,'/api/lockers/claim','POST',{code:first.lockers[2].qr,idempotency_key:'render-lock-0002'},member)).data;
+ assert.deepEqual([claim.ok,claim.locker],[true,'Dolap 3']);
+ assert.equal((await call(app.base,'/api/lockers/claim','POST',{code:first.lockers[2].qr,idempotency_key:'render-lock-0003'},admin)).status,403);
+ await app.stop();app=await boot(env);t.after(app.stop);admin=await login('admin');
+ const second=(await call(app.base,'/api/lockers','GET',null,admin)).data;
+ assert.equal(second.counts.occupied,0);assert.equal(second.events.length,0,'demo locker logs reset');
+ for(let i=0;i<20;i++)assert.notEqual(second.lockers[i].qr,first.lockers[i].qr,'printed demo locker codes stop working after a restart');
+});
