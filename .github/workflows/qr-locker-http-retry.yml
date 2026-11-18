@@ -1,0 +1,22 @@
+name: QR locker full test retry
+on:
+  push:
+    branches: [test/qr-locker-v3-http]
+permissions:
+  contents: read
+jobs:
+  suites:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Verify loopback HTTP bind
+        run: node -e "const s=require('node:http').createServer();s.listen(0,'127.0.0.1',()=>{console.log(s.address());s.close()})"
+      - name: Main suite
+        run: npm test
+      - name: Mobile suite
+        if: always()
+        run: npm --prefix mobile test
